@@ -150,10 +150,27 @@ no de-ARC pass, no 2.0.22 backport is needed.** Use the existing fleet trees:
 
 Historical note — the ARC cliff below still matters if we ever *do* need newer SDL2:
 
-**The hard cliff is SDL 2.24.0**, which made the Cocoa backend **ARC-only**
-(`CMakeLists.txt`: `FATAL_ERROR "Compiler does not support -fobjc-arc"`). No
-ARC-capable compiler targets ppc-apple-darwin. Measured `__bridge` count in
-`SDL_cocoawindow.m`: 0 in 2.0.22, **38 in 2.24.0**.
+**There are TWO cliffs, not one.** Measured 2026-08-21 by fetching
+`src/video/cocoa/SDL_cocoawindow.m` at each tag (reproducible in ~20s):
+
+| tag | `__bridge` | `release]` | build system |
+|---|---|---|---|
+| 2.0.3 | 0 | 26 | autotools: no `-fobjc-arc` |
+| 2.0.6 / 2.0.16 / 2.0.22 | 0 | 6 | CMake *does* pass `-fobjc-arc`; **autotools does not** |
+| **2.24.0** | **38** | 0 | CMake unconditional; configure probes |
+| 2.26.0 / 2.30.0 | 39 | 0 | **2.30.0** adds `FATAL_ERROR` |
+
+1. **Source-level ARC adoption is 2.24.0** — this is the cliff that blocks GCC, and the
+   mechanism is the *source* using ARC constructs, not the build refusing.
+2. **The hard `FATAL_ERROR` is 2.30.0**, a separate and later event.
+
+*Correction: an earlier draft attributed the `FATAL_ERROR` to 2.24.0. It is 2.30.0.*
+Note also that 2.0.22's **CMake** path already passes `-fobjc-arc`, so grepping for that
+flag places the cliff in the wrong release — use the **autotools** path on PPC.
+
+Ceiling is unchanged: **2.0.22 is the last release usable by a non-ARC PPC compiler.**
+Still unmeasured by anyone: that a GCC PPC build of 2.0.22 actually compiles and runs.
+Do not record "2.0.22 works on PPC" until someone does it.
 
 **Viable window: SDL 2.0.16 – 2.0.22.** AO's configure requires `sdl2 >= 2.0.16`;
 **2.0.22 (2022-04-25) is the last pre-ARC release.** Base the fork on 2.0.22.

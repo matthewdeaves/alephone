@@ -132,7 +132,23 @@ own current `lipo` to fatten. **Never pass `-fat64`** — XNU rejects `FAT_MAGIC
 slices, doesn't match them, and loads `ppc`. Adding slices can never break older ones.
 The fat header and every `fat_arch` are always big-endian regardless of host.
 
-## SDL2 — the critical path
+## SDL2 — SOLVED (was believed to be the critical path)
+
+**RESOLVED 2026-08-21. Aleph One's real SDL floor is 2.0.3, not 2.0.16 — and Matt's
+existing `panther-sdl2` tree already provides exactly that.**
+
+Measured, not reasoned: AO calls **zero** APIs from SDL 2.0.4/2.0.5/2.0.6. Its only
+post-2.0.3 API is `SDL_SoftStretchLinear` (ScenarioChooser.cpp:526), already wrapped in
+`#if SDL_VERSION_ATLEAST(2,0,16)` with an `SDL_BlitScaled` (2.0.0) fallback. The only
+other version guards are two `SDL_MOUSEWHEEL_FLIPPED` sites (shell.cpp:1365,
+sdl_widgets.cpp:1659) — cosmetic scroll-direction, degrades gracefully. All four
+`SDL_HINT_*` used are 2.0.0–2.0.2.
+
+`configure.ac:167` has been lowered to `sdl2 >= 2.0.3` accordingly. **No SDL fork,
+no de-ARC pass, no 2.0.22 backport is needed.** Use the existing fleet trees:
+`~/oldmac/panther-sdl2` (2.0.3, 10.3.9, G3) and `~/oldmac/leopard-sdl2` (2.0.6, 10.5).
+
+Historical note — the ARC cliff below still matters if we ever *do* need newer SDL2:
 
 **The hard cliff is SDL 2.24.0**, which made the Cocoa backend **ARC-only**
 (`CMakeLists.txt`: `FATAL_ERROR "Compiler does not support -fobjc-arc"`). No
@@ -242,7 +258,15 @@ and irrelevant here) and compare function **addresses** to `NULL`. `-isysroot` +
       gamepads by runtime check on Leopard, rather than raising the floor.
       Note Leopard officially requires an 867MHz G4+, so a 10.5 floor would drop the
       G3s outright — hence the low floor plus runtime detection.
-- [ ] Does `SDL_GameController` work at all on PPC? (unproven anywhere)
+- [ ] Does `SDL_GameController` work at all on PPC? Both fleet trees are built
+      `--disable-joystick`. AO uses `SDL_GameController*` — needs resolving.
+- [ ] **THE remaining blocker: a C++17 compiler for PPC.** The fleet's PPC toolchain is
+      `gcc-4.0`/`gcc-4.2` from Xcode 3.2.6 (C++03) — fine for Quake/Half-Life, which are
+      C; cannot build AO's C++17. Needs GCC 14 cross to `powerpc-apple-darwin`, hosted
+      on a Lion mini or `mini-sl`, reusing the existing 10.3.9/10.4u/10.5 SDKs and
+      Xcode 3.2.6 cctools. Precedent in Matt's own fleet:
+      `old-mac-build-host/scripts/remote-build-gcc-snow.sh` already builds GCC 7.5 on
+      Snow Leopard.
 - [ ] QEMU (`qemu-system-ppc`, Mac99) as a fast test target vs real G3/G4/G5?
 - [ ] Big-endian bit-rot survey (5th agent still running)
 

@@ -164,7 +164,13 @@ AC_DEFUN([AX_REQUIRE_PKG],
                              [ AC_MSG_ERROR([You need $1 to run Aleph One.]) ]) ])
 
 dnl Check for required SDL dependencies.
-AX_REQUIRE_PKG([SDL2], [SDL], [sdl2 >= 2.0.16])
+dnl PPC port: the real floor is 2.0.3, not 2.0.16. The only API newer than 2.0.3
+dnl is SDL_SoftStretchLinear (ScenarioChooser.cpp:526), which is already guarded by
+dnl SDL_VERSION_ATLEAST(2,0,16) with an SDL_BlitScaled fallback. The two other
+dnl guarded sites (shell.cpp:1365, sdl_widgets.cpp:1659) are SDL_MOUSEWHEEL_FLIPPED,
+dnl cosmetic and degrading gracefully. AO calls nothing from 2.0.4/2.0.5/2.0.6.
+dnl 2.0.3 is what alex-free's panther-sdl2 provides for Mac OS X 10.3.9 PPC.
+AX_REQUIRE_PKG([SDL2], [SDL], [sdl2 >= 2.0.3])
 AX_REQUIRE_PKG([SDL2_ttf], [SDL_TTF], [SDL2_ttf])
 
 dnl Check for zlib.

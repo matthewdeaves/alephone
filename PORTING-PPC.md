@@ -10,7 +10,7 @@ every Mac from a G3 running Tiger to a 2019 Intel Mac Pro.
 
 | Slice    | Min OS  | Covers                                              |
 |----------|---------|-----------------------------------------------------|
-| `ppc`    | **10.4**| All PPC Macs — G3, G4, G5 (baseline, **no AltiVec**) |
+| `ppc`    | **10.3.9** target / 10.4 fallback | All PPC Macs — G3, G4, G5 (baseline, **no AltiVec**) |
 | `i386`   | 10.4.4  | 2006 Core Duo/Solo → 10.14 Mojave                    |
 | `x86_64` | 10.5+   | Core 2 Duo → current macOS on Intel                  |
 
@@ -97,9 +97,20 @@ perpetually incomplete. **Use GCC.**
 - GCC 15/16 on PPC are unvalidated upstream — GCC 15 silently broke on Tiger PPC
   (PR 123976). **Pin GCC 14.**
 
-**`ppc` floor is 10.4, NOT 10.3.9.** Iain Sandoe deleted `powerpc-darwin7` from
-config-list.mk in 2023-09 (commit `594fe7457`) with the note *"drop one earlier case
-where GCC will no longer build with native tools."* Panther is out of reach.
+**10.3.9 is the target; 10.4 is the documented fallback.** Iain Sandoe deleted
+`powerpc-darwin7` from config-list.mk in 2023-09 (`594fe7457`), noting *"GCC will no
+longer build with native tools."* Read precisely, that is about **bootstrapping GCC on
+Panther**, not about *targeting* it — `config.gcc` still handles `darwin7`, and
+`alex-free/panther-sdl2` explicitly supports **10.3.9** with
+`MACOSX_DEPLOYMENT_TARGET=10.3` (tested with Xcode 2.5).
+
+Approach: cross-GCC + lowest achievable `-mmacosx-version-min`, one `ppc` slice,
+runtime feature detection above it — the pattern AO itself used in
+`DisableClipVertex()`. **The governing risk is the weak-linking trap:** link a single
+10.4-only symbol and dyld aborts *at launch* on a 10.3.9 G3, while every test passes on
+the build host. Audit with `nm -arch ppc -u` against the 10.3.9 symbol set before
+declaring 10.3 support. If the runtime proves unreachable, fall back to 10.4 and say so
+plainly rather than shipping something that dies on a G3.
 
 **Binutils:** Tiger's Xcode 2.5 tools are insufficient — GCC needs **ld64-85.2.1+**.
 Use Tigerbrew's `ld64-97.17` / `cctools-806` (ld64-97 is reported to work better on
@@ -223,9 +234,14 @@ and irrelevant here) and compare function **addresses** to `NULL`. `-isysroot` +
 - [x] ~~Is 10.3 achievable?~~ **No. 10.4 is the floor.**
 - [x] ~~SDL2 on PPC?~~ **Fork 2.0.22** (last pre-ARC); prior art exists
 - [x] ~~Boost version?~~ **1.76.0**, avoid 1.90
-- [ ] **Tiger (10.4) or Leopard (10.5) as the PPC target?** Leopard buys GL 2.0,
+- [x] ~~Tiger or Leopard?~~ **Lowest floor + runtime detection.** Leopard buys GL 2.0,
       IOHIDManager (joystick), working CoreAudio, ObjC 2.0. Tiger buys older G3s.
-      The PPC ports ecosystem primarily targets 10.5/10.6; Tiger is secondary.
+      **DECIDED: neither — target the lowest, detect features at runtime.** Must run
+      on 10.3, 10.4, 10.5, 10.6, 10.7 and up, PPC and Intel. So the `ppc` slice takes
+      the lowest reachable deployment target and lights up GL 2.0 / IOHIDManager /
+      gamepads by runtime check on Leopard, rather than raising the floor.
+      Note Leopard officially requires an 867MHz G4+, so a 10.5 floor would drop the
+      G3s outright — hence the low floor plus runtime detection.
 - [ ] Does `SDL_GameController` work at all on PPC? (unproven anywhere)
 - [ ] QEMU (`qemu-system-ppc`, Mac99) as a fast test target vs real G3/G4/G5?
 - [ ] Big-endian bit-rot survey (5th agent still running)

@@ -237,3 +237,61 @@ No one has published a genuine 2020s ppc+i386 fat Mach-O. ScummVM ships a curren
 "Super Duper Universal Binary" post is explicitly theoretical — *"there's a challenge
 for someone."* **We would be doing something genuinely novel.** Every mechanical piece
 is verified to work.
+
+## Precedent — corrected: we are REBUILDING something that existed
+
+The exact artifact we want **shipped for four years**. Aleph One 1.0 (2011-12-01)
+through **1.2.1 (2015-06-20)** were all 3-way fat binaries — `ppc i386 x86_64`,
+`LSMinimumSystemVersion 10.4.0` — verified by `lipo` on the archived DMGs. 1.2.1
+remained the official stable download until 1.3 shipped in Aug 2020.
+
+Published 1.0 requirements (inherited by 1.2.1): *500 MHz / 128 MB RAM; 1 GHz /
+256 MB recommended. Mac OS X 10.4 or higher. OpenGL (Shader) renderer: ATI Radeon
+9600 or nVidia GeForce FX 5200 or newer.* Note this matches the GL capability data
+exactly — and it means **the Shader renderer genuinely ran on PPC**.
+
+PPC and i386 were dropped together at **1.3a1 (2015-09-07)**. `8042f4f2`
+(2015-03-12, Hopper, "Ensure correct architectures are built in Xcode 3.2") had set
+`ARCHS = (ppc, i386, x86_64)` only three months earlier — PPC was actively defended,
+then dropped for a stated reason:
+
+> treellama, 2016-01-12: *"The new SDL uses APIs that simply aren't available in
+> ancient versions of OS X."*
+
+**The drop was SDL2, not the C++ standard, not endianness.** That is exactly the
+blocker this plan is built around, and it confirms the SDL2 fork is the critical path.
+
+### Recoverable from git history
+
+- `git show release-20150620:Source_Files/RenderMain/OGL_Shader.cpp` — the **Tiger
+  GLSL workaround**: `DisableClipVertex()` sniffs `uname -r` for `"8."` because
+  *"In Mac OS X 10.4 and Mesa, setting gl_ClipVertex causes a black screen."*
+  Deleted from master by `3a148ecd`. **Revert it** when GL is attempted.
+- `git show 8042f4f2` — the Xcode 3.2 project settings that produced the 3-way fat.
+- `PBProjects/` (the Xcode 2/3 project) was deleted by `efe39821` (2016-02-28) —
+  fully recoverable.
+
+### Upstream's own position — validates keeping this private
+
+> Hopper (lead maintainer), 2016-01-24: *"I have no objection to anyone porting
+> future Aleph One versions to PowerPC or other unsupported systems, similar to the
+> TenFourFox project... **However, I will not accept patches from porting projects
+> which make it harder to maintain and improve Aleph One for supported systems.**"*
+
+So the port is explicitly *permitted* and upstream has explicitly said they will not
+take the patches. Nobody has taken it up in the ten years since. Keep this fork private
+to upstream — that is their stated preference, not just ours.
+
+## The big de-risk: modern Aleph One already builds big-endian
+
+**FreeBSD ships a built package of Aleph One 1.6.1 (`alephone-20230119_3`) for 32-bit
+big-endian `powerpc`.** ([freshports.org/games/alephone](https://www.freshports.org/games/alephone/))
+
+That is a post-SDL2, post-C++17 Aleph One (Jan 2023) compiling and packaging on a
+big-endian PowerPC target *today*. It does not prove it renders correctly, and it was
+built with libyuv/libvpx enabled — exercising the very movie-export path most likely
+to be endian-broken. But it substantially de-risks the C++ and endianness side.
+
+**Conclusion: the blocker is the macOS platform stack (SDL2, the 10.13 target, vcpkg,
+GLSL), not the engine and not big-endianness.** The film-replay oracle still has to
+prove endian correctness, but we are no longer guessing whether it's achievable.

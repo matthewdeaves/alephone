@@ -1,7 +1,7 @@
 # Aleph One — PPC / Intel Fat Binary Port
 
 Goal: build the **current** Aleph One engine as a **single fat binary** running on
-every Mac from a 2003 G3 to a 2019 Intel Mac Pro.
+every Mac from a G3 running Tiger to a 2019 Intel Mac Pro.
 
 **This is a private fork. Never open PRs, push branches, or file issues upstream
 (Aleph-One-Marathon/alephone). The `upstream` remote has its push URL disabled.**
@@ -10,7 +10,7 @@ every Mac from a 2003 G3 to a 2019 Intel Mac Pro.
 
 | Slice    | Min OS  | Covers                                              |
 |----------|---------|-----------------------------------------------------|
-| `ppc`    | 10.3.9  | All PPC Macs — G3, G4, G5 (baseline, **no AltiVec**) |
+| `ppc`    | **10.4**| All PPC Macs — G3, G4, G5 (baseline, **no AltiVec**) |
 | `i386`   | 10.4.4  | 2006 Core Duo/Solo → 10.14 Mojave                    |
 | `x86_64` | 10.5+   | Core 2 Duo → current macOS on Intel                  |
 
@@ -80,30 +80,160 @@ Good news — the engine's own code is in far better shape than expected:
 
 Size: 270k lines total, 248k excluding bundled Lua.
 
-## Toolchain
+## Toolchain — RESOLVED
 
-Constraint: we need a compiler that emits **PPC Mach-O** *and* supports **C++11+**.
-Apple never shipped one — Xcode 3.2.6 (last with PPC) tops out at GCC 4.2 / C++03.
+**LLVM/clang is a dead end.** Apple clang has no PowerPC backend at all
+(`clang --print-targets` lists 11 backends, none PowerPC); modern `ld` self-reports
+no ppc. Iain Sandoe's own 2016 LLVM RFC proposed removing PowerPC/Darwin as
+perpetually incomplete. **Use GCC.**
 
-Planned shape: use Xcode 3.2.6 / cctools for what it's uniquely good at — PPC-capable
-`as`, `ld`, `lipo`, the 10.4u SDK, and bundle packaging — but swap in a **modern GCC**
-as the compiler, wired in via an External Build System target or a custom `.xcspec`.
+**GCC 14 is the answer**, targeting `powerpc-apple-darwin8` (10.4) or `darwin9` (10.5):
+- GCC still carries `powerpc-*-darwin*` and `powerpc-apple-darwin8` is in
+  `contrib/config-list.mk`, GCC's cross-build smoke test.
+- Brian Callahan bootstrapped **GCC 14.2.0 natively on a 1.25GHz G4 under Tiger**
+  (2025-03), then built Python 3.12 / OpenSSL 3.3.2 / curl 8.11 with it.
+- `macos-powerpc/powerpc-ports` ships **GCC 14.3.0** with Tiger patches, actively
+  maintained (commits within the last week).
+- GCC 15/16 on PPC are unvalidated upstream — GCC 15 silently broke on Tiger PPC
+  (PR 123976). **Pin GCC 14.**
 
-*Exact GCC version pending research.* Do not guess.
+**`ppc` floor is 10.4, NOT 10.3.9.** Iain Sandoe deleted `powerpc-darwin7` from
+config-list.mk in 2023-09 (commit `594fe7457`) with the note *"drop one earlier case
+where GCC will no longer build with native tools."* Panther is out of reach.
 
-## Verification strategy
+**Binutils:** Tiger's Xcode 2.5 tools are insufficient — GCC needs **ld64-85.2.1+**.
+Use Tigerbrew's `ld64-97.17` / `cctools-806` (ld64-97 is reported to work better on
+PPC than ld64-127), or `tpoechtrager/cctools-port` branch `877.8-ld64-253.9-ppc`
+(Michael Weiser's PPC forward-port, updated 2026-04).
 
-`tests/replay_film_test.cpp` + recorded films for M1, M2 and Infinity. Film replay is
-deterministic lockstep: if a PPC build replays the films to the same end state as an
-x86_64 build, the endian port is provably correct. This is the oracle — it means the
-byte-swapping work is testable rather than eyeballed. Keep Catch2 for this reason.
+**SDK:** 10.4u via `devel​​ernay/xcodelegacy` (`XcodeLegacy.sh`, v2.7 July 2026) which
+also patches the 10.4u SDK to work with GCC 4.2+. Xcode 3.2.6 is the last Apple
+release with PPC support (10.4u + 10.5 + 10.6 SDKs).
 
-Build order: x86_64 (control) → i386 (wordsize) → ppc (endianness).
+**`lipo`: a non-problem — verified empirically.** Xcode 26.6's `lipo` is cctools-1040
+and retains full PowerPC support (create / thin / extract / verify / `-detailed_info`,
+plus `otool`, `nm`, `size`, `strip`, `install_name_tool` with `-arch ppc`). Use Apple's
+own current `lipo` to fatten. **Never pass `-fat64`** — XNU rejects `FAT_MAGIC_64` for
+`MH_EXECUTE`; it can't happen accidentally for an app binary.
+
+**Fat binaries are safe by construction.** XNU `bsd/kern/mach_fat.c` `fatfile_getarch()`
+`continue`s past any cputype it doesn't recognise. A Tiger G4 sees the i386/x86_64
+slices, doesn't match them, and loads `ppc`. Adding slices can never break older ones.
+The fat header and every `fat_arch` are always big-endian regardless of host.
+
+## SDL2 — the critical path
+
+**The hard cliff is SDL 2.24.0**, which made the Cocoa backend **ARC-only**
+(`CMakeLists.txt`: `FATAL_ERROR "Compiler does not support -fobjc-arc"`). No
+ARC-capable compiler targets ppc-apple-darwin. Measured `__bridge` count in
+`SDL_cocoawindow.m`: 0 in 2.0.22, **38 in 2.24.0**.
+
+**Viable window: SDL 2.0.16 – 2.0.22.** AO's configure requires `sdl2 >= 2.0.16`;
+**2.0.22 (2022-04-25) is the last pre-ARC release.** Base the fork on 2.0.22.
+
+Do NOT use MacPorts upstream `libsdl2-powerpc` (2.30.10): it is **X11-only**, built
+`--disable-video-cocoa --disable-video-opengl --disable-joystick`, and on Tiger also
+`--disable-audio`. Unusable for Aleph One.
+
+Prior art to build from:
+- `alex-free/panther-sdl2` — SDL **2.0.3**, 10.3.9 + 10.4, real Cocoa backend
+- `alex-free/leopard-sdl2` — SDL **2.0.6**, 10.5, real Cocoa backend
+- Thomas Bernard's `SDL2-2.0.3_OSX_104.patch` (855 lines/16 files) — upstream of both
+- MacPorts `0001-Fixes-for-PowerPC.patch` — mechanical `@autoreleasepool` →
+  `NSAutoreleasePool` de-ARC across all `.m` files (proves de-ARC is mechanical)
+- SDL commit `4a468739f` (2016-05-21) removed 10.5 support — **revert it** to recover
+  Apple's own `CGDisplayAvailableModes` path verbatim
+
+Known gap: **joystick/GameController is disabled in every existing PPC SDL2 build**
+(10.4 lacks `IOHIDManager`; MacPorts hits GCC ICE PR105522 in hidapi). Aleph One uses
+`SDL_GameController`. On 10.5 it *should* build (IOHIDManager is 10.5+), but this is
+**unproven** — treat as a real risk. 2.0.16 predates hidapi and sidesteps the ICE.
+
+## OpenGL reality on PPC
+
+| OS | GPU | GL | Shaders |
+|---|---|---|---|
+| Tiger 10.4 | anything | **max GL 1.5**, no NPOT on *any* GPU | ARB frag shaders on R3xx+/NV3x+ |
+| Leopard 10.5 | Radeon 9600+/GeForce FX+ | **GL 2.0 + GLSL 1.20**, NPOT | yes |
+| either | Radeon 9200 | GL 1.3 | **never** — fixed function only |
+
+Start `--disable-opengl` (software renderer). GL is a Leopard-only stretch goal
+requiring R3xx/NV3x or better. AO's GL path uses `glCreateShaderObjectARB` and never
+calls `glewInit()` off Windows — ARB shader objects are exactly what these GPUs expose.
+
+## Dependencies — mostly solved by an existing ecosystem
+
+`macos-powerpc/powerpc-ports` (MacPorts fork, 25k+ ports, 759 prebuilt, release
+2026.07) already carries working ppc/ppc64 darwin8/9 ports of nearly everything:
+
+| Dep | Version | Note |
+|---|---|---|
+| boost | **1.76.0** | Boost.Atomic has native PPC asm → lockfree works. **Avoid 1.90** (PPC regression, boostorg/atomic#79) |
+| SDL2 | fork 2.0.22 | See above — the real work |
+| SDL2_ttf | 2.24.0 | pure C + FreeType, easy |
+| asio | 1.32.0 | header-only |
+| libsndfile | 1.2.2 | BE-clean by construction (reads AIFF) |
+| **openal-soft** | **1.23.1 — MANDATORY** | see below |
+| Catch2 | 3.15.3 | our oracle |
+
+**CORRECTION — Apple's OpenAL.framework CANNOT substitute.** `OpenALManager::Init`
+(OpenALManager.cpp:46-58) hard-fails without **`ALC_SOFT_loopback`**; AO never opens a
+real device, it renders via `alcRenderSamplesSOFT` into `SDL_OpenAudio`, and
+`GenerateEffects()` needs **EFX** (`alGenFilters`, `AL_FILTER_LOWPASS`). Apple's
+framework has neither. openal-soft **1.23.1** specifically — 1.24.0+ added AltiVec SIMD
+that is broken on big-endian (kcat/openal-soft#1067).
+
+Compile out, confirmed zero-cost:
+- **nativefiledialog** — AO already has an in-engine `ReadFileDialog`
+  (FileHandler.cpp:1477) used whenever `HAVE_NFD` is undefined; every call site guarded
+- **steamworks** — Steam for Mac was Intel-only 10.5+; the *client* never ran on PPC
+- **FILM_EXPORT** (vpx+matroska+ebml+vorbis+libyuv) — all-or-nothing gate. libvpx
+  deleted PPC support upstream in 2015; its only PPC SIMD since is VSX/POWER8, which
+  no Apple PowerPC machine has. Dropping this removes 4 risky deps at once.
+- **libyuv** — has a BE-aware path but zero PPC SIMD; AO falls back to pl_mpeg
+
+## .app bundle for Tiger
+
+- **Icons already work.** Our `.icns` files carry `it32`+`t8mk` (128×128 = the 10.3/10.4
+  maximum). No regeneration needed. Only if rendering misbehaves, strip the 10.7-era
+  `TOC ` chunk that sits first in `AlephOne.icns`.
+- **Set `INFOPLIST_OUTPUT_FORMAT=XML`** — currently unset, so Xcode emits binary plists.
+- **Set per-arch deployment targets** using the mechanism already used for arm64:
+  `MACOSX_DEPLOYMENT_TARGET[arch=ppc]=10.4`, `[arch=i386]=10.4`, `[arch=x86_64]=10.5`.
+- `LSMinimumSystemVersion` is currently `10.13` — must change.
+- **Do not code-sign the retro build.** Unsigned is correct for 10.4/10.5. (PPC slices
+  *do* sign fine on modern tooling if ever needed — verified — but signing adds a
+  10.5-era `LC_CODE_SIGNATURE` of unverified tolerance, for zero benefit.)
+- Must be absent: `_CodeSignature`, `Assets.car` (10.9+, icon genuinely won't be found),
+  `Base.lproj` (10.8+ — use `English.lproj`).
+- Genuine PPC-era binaries carry **no** `LC_VERSION_MIN_MACOSX` (that's 10.6+). Its
+  absence in our output is correct, not a bug.
+
+## Weak-linking gotcha
+
+Building against 10.4u but deploying lower links 10.4-only symbols **strongly**; dyld
+then aborts at **launch** with "Symbol not found" — on the target machine, passing every
+test on the build host. Use `AvailabilityMacros.h` (10.2-era; `Availability.h` is 10.6+
+and irrelevant here) and compare function **addresses** to `NULL`. `-isysroot` +
+`-mmacosx-version-min` must appear in `CFLAGS`, `CXXFLAGS` **and** `LDFLAGS`.
 
 ## Open questions
 
-- [ ] Which GCC can target `powerpc-apple-darwin` with C++11/17? (researching)
-- [ ] Is 10.3 achievable or is 10.4 the practical floor? (researching)
-- [ ] SDL2 on PPC — existing patches, or port it ourselves? (researching)
-- [ ] Boost: newest version that builds for PPC Darwin? (researching)
+- [x] ~~Which GCC?~~ **GCC 14**, `powerpc-apple-darwin8/9`
+- [x] ~~Is 10.3 achievable?~~ **No. 10.4 is the floor.**
+- [x] ~~SDL2 on PPC?~~ **Fork 2.0.22** (last pre-ARC); prior art exists
+- [x] ~~Boost version?~~ **1.76.0**, avoid 1.90
+- [ ] **Tiger (10.4) or Leopard (10.5) as the PPC target?** Leopard buys GL 2.0,
+      IOHIDManager (joystick), working CoreAudio, ObjC 2.0. Tiger buys older G3s.
+      The PPC ports ecosystem primarily targets 10.5/10.6; Tiger is secondary.
+- [ ] Does `SDL_GameController` work at all on PPC? (unproven anywhere)
 - [ ] QEMU (`qemu-system-ppc`, Mac99) as a fast test target vs real G3/G4/G5?
+- [ ] Big-endian bit-rot survey (5th agent still running)
+
+## Precedent
+
+No one has published a genuine 2020s ppc+i386 fat Mach-O. ScummVM ships a current
+"Mac OS X 10.4+ PPC 32 bits" build but as a *separate download*. TenFourFox's 2020
+"Super Duper Universal Binary" post is explicitly theoretical — *"there's a challenge
+for someone."* **We would be doing something genuinely novel.** Every mechanical piece
+is verified to work.

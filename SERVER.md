@@ -68,12 +68,47 @@ different — confirmed by reading `standalone_hub_main.cpp` in full:
    something to go looking for in the issue tracker. Searched upstream
    issues for "hub" / "standalone hub" anyway: nothing further turned up.
 
-## Left to do — all unmeasured by me so far
+## Update 2026-08-23 — item 1 confirmed, item 2 hits a real limit
 
-1. Build `standalone_hub` in **this fork** and confirm it actually runs —
-   untested here specifically; this fork's CI has never fired at all.
-2. Confirm a real PPC/Intel client can complete a gather against a
-   Linux-hosted `standalone_hub` — cross-arch/cross-endian wire compat is
-   unverified in either direction.
-3. Hosting/deployment is `retro-server-infra`'s call, not this repo's — this
+**Built `standalone_hub` in this fork, on the workstation, from
+`Dockerfile.hub` unmodified:** `docker build -f Dockerfile.hub .` — succeeds
+clean, full autotools build inside the Alpine builder stage, no patches
+needed. **Ran it:** `docker run ... alephone-standalone-hub-test 15000`, gave
+it 15s, still up, `ps aux` inside the container shows `PID 1
+./standalone_hub 15000` alive, no crash through the whole
+`initialize_hub()`/`initialize_marathon()`/`mytm_initialize()` init chain.
+`netstat -tulnp` inside the container: listening on both `tcp` and `udp`
+`0.0.0.0:15000`. First time this has been built or run in this fork
+specifically — genuinely measured, not just "upstream's CI says so."
+
+**Item 2 (a real gather) is not a quick smoke test — flagging the actual
+limit rather than forcing it.** The client side of a gather is GUI-only:
+`network_dialogs.cpp:2708-2711`'s "Use Dedicated Server" toggle lives in the
+network setup dialog, and there is no CLI or scripted path into it —
+`shell_options.cpp`'s flag table (`-f/-w/-g/-s/-m/-j/-Q/-e/--no-chooser`) has
+nothing for headless networking. The normal client's `initialize_application()`
+(`shell.cpp:228`) always calls `SDL_Init(SDL_INIT_VIDEO|...)` unconditionally
+— unlike `standalone_hub`, it cannot skip video, and there's no
+`SDL_VIDEODRIVER` override in the engine even if there were a way to drive
+the dialog blind. Completing a gather needs either a human at a real display
+clicking through that dialog, or a GUI-automation/event-injection harness
+that does not currently exist anywhere in this codebase. Not attempting to
+build that harness now — out of scope for a smoke test, would need its own
+ticket if wanted.
+
+## Left to do
+
+1. ~~Build `standalone_hub` in this fork and confirm it runs~~ **Done,
+   measured, above.**
+2. A real gather end to end — **needs a human at a display**, or a new,
+   separately-scoped GUI-automation harness. Not attempted.
+3. Confirm a real PPC/Intel client can complete a gather against a
+   Linux-hosted `standalone_hub` — blocked on #2 either way, and separately
+   on the PPC build existing at all.
+4. Hosting/deployment is `retro-server-infra`'s call, not this repo's — this
    repo ships the binary/image, sequencing across repos is the manager's.
+   Its ask (relayed 2026-08-23): a native Linux binary built the same way the
+   other four ports release theirs, not the Docker image — matches its
+   existing bare-systemd deploy pattern. Worth building toward once item 2 is
+   resolved, `Dockerfile.hub`'s `--enable-standalone-hub --disable-opengl` is
+   the known-good compile flags to carry over.

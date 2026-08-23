@@ -301,7 +301,29 @@ and irrelevant here) and compare function **addresses** to `NULL`. `-isysroot` +
       `old-mac-build-host/scripts/remote-build-gcc-snow.sh` already builds GCC 7.5 on
       Snow Leopard.
 - [ ] QEMU (`qemu-system-ppc`, Mac99) as a fast test target vs real G3/G4/G5?
-- [ ] Big-endian bit-rot survey (5th agent still running)
+- [x] ~~Big-endian bit-rot survey~~ **DONE 2026-08-23 for post-2015 additions — no
+      bit-rot found.** Method: `git log --diff-filter=A --since=2015-09-01` lists 44
+      source files added since PPC was dropped; audited every one doing binary I/O.
+      All clean, and the discipline is notably good:
+      - Endian switch derives from `SDL_BYTEORDER` (cseries.h) — flips automatically
+        on PPC, no configure work needed.
+      - `Pinger.cpp:50-60` and the star protocol pack via `AOStreamBE`;
+        `SoundsPatch.cpp` reads via `BIStreamBE`; `NetworkInterface.cpp` is
+        address/socket plumbing only, no payload packing.
+      - Audio: `OpenALManager.h:153-165` maps OpenAL↔SDL formats using `AUDIO_*SYS`
+        (native-endian) on both sides; `SoundFile.cpp:165` swaps sample data by
+        `little_endian ^ PlatformIsLittleEndian()`.
+      - Movie playback (the PPC path, no libyuv): `plm_frame_to_rgba` writes R,G,B,A
+        byte order and `interface.cpp:3586-3588` creates the surface with flipped
+        masks for BE. pl_mpeg's bit reader is byte-wise shift accumulation, zero
+        `BYTE_ORDER` dependence.
+      Minor fragility, not endian bit-rot: `OpenALManager.cpp:405` does
+      `mapping_sdl_openal_format.at(obtained.format)` — if SDL's audio backend
+      obtains a non-`SYS` format, `.at()` throws and audio init crashes instead of
+      falling back. Needs a real-hardware check before it's worth a ticket.
+      Pre-2015 code (wad/save/film I/O) was proven on PPC when it shipped and is
+      exercised by `tests/replay_film_test.cpp`; the film oracle on real hardware
+      remains the final proof.
 
 ## Precedent
 

@@ -9,7 +9,11 @@ libcseries_a_SOURCES = byte_swapping.h BStream.h csalerts.h		\
   csdialogs_sdl.cpp csmisc_sdl.cpp cspaths_sdl.cpp csstrings.cpp FilmProfile.cpp	\
   mytm_sdl.cpp
 
+if TARGET_DARWIN
+libcseries_a_SOURCES += csalerts.mm cspaths.mm
+else
 EXTRA_libcseries_a_SOURCES = csalerts.mm cspaths.mm
+endif
 
 AM_CPPFLAGS = -I$(top_srcdir)/Source_Files/Files -I$(top_srcdir)/Source_Files/GameWorld \
   -I$(top_srcdir)/Source_Files/Input -I$(top_srcdir)/Source_Files/Misc \

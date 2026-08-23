@@ -233,10 +233,17 @@ void initialize_application(void)
 #endif
 
 	// Initialize SDL
-	int retval = SDL_Init(SDL_INIT_VIDEO |
-						  (shell_options.nosound ? 0 : SDL_INIT_AUDIO) |
-						  (shell_options.nojoystick ? 0 : SDL_INIT_JOYSTICK|SDL_INIT_GAMECONTROLLER) |
-						  (shell_options.debug ? SDL_INIT_NOPARACHUTE : 0));
+	const Uint32 base_flags = SDL_INIT_VIDEO |
+							  (shell_options.nosound ? 0 : SDL_INIT_AUDIO) |
+							  (shell_options.debug ? SDL_INIT_NOPARACHUTE : 0);
+	const Uint32 joystick_flags = shell_options.nojoystick ? 0 : SDL_INIT_JOYSTICK|SDL_INIT_GAMECONTROLLER;
+	int retval = SDL_Init(base_flags | joystick_flags);
+	if (retval < 0 && joystick_flags)
+	{
+		// SDL built without joystick support (e.g. --disable-joystick): run without game controllers
+		fprintf(stderr, "SDL joystick/controller init failed (%s); continuing without game controllers\n", SDL_GetError());
+		retval = SDL_Init(base_flags);
+	}
 	if (retval < 0)
 	{
 		const char *sdl_err = SDL_GetError();

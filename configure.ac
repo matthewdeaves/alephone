@@ -72,6 +72,10 @@ AS_CASE([$target],
 AM_CONDITIONAL([MAKE_WINDOWS], [test "x$make_windows" = "xtrue"])
 AM_CONDITIONAL([INSTALL_MIME], [test "x$install_mime" = "xtrue"])
 
+dnl The SDL platform files expect Cocoa implementations on macOS
+AS_CASE([$target], [*-*-darwin*], [target_darwin=true])
+AM_CONDITIONAL([TARGET_DARWIN], [test "x$target_darwin" = "xtrue"])
+
 dnl The standalone hub option
 AC_ARG_ENABLE([standalone_hub],
               AS_HELP_STRING([--enable-standalone-hub],

@@ -59,6 +59,13 @@ Two open items block a first build:
   Never PR, push a branch, or file an issue upstream — upstream's maintainer
   said in writing they will not take patches from porting projects. This is
   explicitly *permitted* by them, just never upstreamed.
+- **This is a real GitHub fork of an active repo, so bare `gh issue list` /
+  `gh issue view` resolve to `Aleph-One-Marathon/alephone` (580+ unrelated
+  issues), not this fork.** Verified 2026-08-23 — `gh repo view` confirms
+  `isFork: true`. Always pass `-R matthewdeaves/alephone` explicitly. This is
+  the one repo in the fleet where the shared brief's "bare `gh issue list`
+  reads the git remote and cannot get the name wrong" does not hold — the
+  other four ports aren't forks of a live upstream.
 - **Public repo — the CI-green rule applies.** `.github/workflows/ci-build.yml`
   builds Linux/Windows/macOS on `[push, pull_request]`, no branch filter.
   `--with-catch2` is already wired into the Linux configure step.

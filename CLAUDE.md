@@ -75,7 +75,7 @@ Two open items block a first build:
 This repo is one of eight worked on together: five game ports, the private
 `retro-server-infra` which runs the servers, the private `old-mac-build-host`
 which owns the machines, and `retro-agents` which runs the sessions. One board
-covers all seven: <https://github.com/users/matthewdeaves/projects/8>.
+covers all eight: <https://github.com/users/matthewdeaves/projects/8>.
 
 Nothing arbitrates WORKING TREES. Two sessions in one repo can collide silently,
 and a sync can write into your tree mid-task, so stage by name and never

@@ -285,15 +285,17 @@ and irrelevant here) and compare function **addresses** to `NULL`. `-isysroot` +
       (panther-sdl2 `src/SDL.c:207,220`), and AO's `shell.cpp:236-248` passes those
       flags in one combined `SDL_Init` and calls `exit(1)` on any failure — video and
       audio fine, dead at launch anyway. Two outs: AO already has `-j`/`--nojoystick`
-      (`shell_options.cpp:95`) which skips the flags entirely; or a small fallback in
-      `initialize_application` (retry `SDL_Init` without the joystick flags on
-      failure), which is the runtime-detection shape this port wants — gamepads light
-      up automatically iff the SDL2 slice supports them. `initialize_joystick()` and
+      (`shell_options.cpp:95`) which skips the flags entirely; and the proper fix —
+      retry `SDL_Init` without the joystick flags on failure — **landed in
+      `ec262ff4`** (alephone#2, CI-verified), so gamepads light up automatically iff
+      the SDL2 slice supports them. `initialize_joystick()` and
       the rest of `joystick_sdl.cpp` are safe with the subsystem absent: guarded by
       `SDL_NumJoysticks() <= 0` / `active_instances.empty()`. Whether gamepads can be
       made to *work* on 10.5 (IOHIDManager) is a separate, later question — the game
       runs either way.
-- [ ] **THE remaining blocker: a C++17 compiler for PPC.** The fleet's PPC toolchain is
+- [ ] **THE remaining blocker: a C++17 compiler for PPC.** In progress: buildhost is
+      actively building the GCC 14 cross-compiler (old-mac-build-host#25, per the
+      manager 2026-08-24). The fleet's PPC toolchain is
       `gcc-4.0`/`gcc-4.2` from Xcode 3.2.6 (C++03) — fine for Quake/Half-Life, which are
       C; cannot build AO's C++17. Needs GCC 14 cross to `powerpc-apple-darwin`, hosted
       on a Lion mini or `mini-sl`, reusing the existing 10.3.9/10.4u/10.5 SDKs and

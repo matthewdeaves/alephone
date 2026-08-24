@@ -294,8 +294,12 @@ and irrelevant here) and compare function **addresses** to `NULL`. `-isysroot` +
       made to *work* on 10.5 (IOHIDManager) is a separate, later question — the game
       runs either way.
 - [ ] **THE remaining blocker: a C++17 compiler for PPC.** In progress: buildhost is
-      actively building the GCC 14 cross-compiler (old-mac-build-host#25, per the
-      manager 2026-08-24). The fleet's PPC toolchain is
+      actively building the GCC 14 cross-compiler (old-mac-build-host#25). Confirmed
+      scope from buildhost 2026-08-24: prefix `~/gcc14-ppc` on mini-intel, target
+      `powerpc-apple-darwin8`, no alephone-specific wiring — a general fleet asset,
+      docs to land alongside their `docs/modern-tools.md`. NOT verified yet — do not
+      point builds at it until buildhost says it passed a real PPC compile plus the
+      `nm -u` 10.3.9 check. The fleet's PPC toolchain is
       `gcc-4.0`/`gcc-4.2` from Xcode 3.2.6 (C++03) — fine for Quake/Half-Life, which are
       C; cannot build AO's C++17. Needs GCC 14 cross to `powerpc-apple-darwin`, hosted
       on a Lion mini or `mini-sl`, reusing the existing 10.3.9/10.4u/10.5 SDKs and

@@ -10,17 +10,26 @@ file does not repeat them.
 ## Where this actually stands (verify against the tree, not this line)
 
 This is a from-scratch build, not a tuning pass like the other four ports.
-As of 2026-08-23: no `scripts/` directory, no PPC cross-compiler on any fleet
+As of 2026-08-25: no `scripts/` directory, no PPC cross-compiler on any fleet
 machine, no fat binary, nothing benched. Do not assume `PORTING-PPC.md`'s
 checkboxes are current — it is a living plan doc, check the tree.
 
-Two open items block a first build:
-- Whether `SDL_GameController` works on PPC at all — every existing fleet
-  SDL2 tree (`panther-sdl2`, `leopard-sdl2`) is built `--disable-joystick`.
-- The GCC 14 cross-compiler itself. Not built anywhere yet.
-  `old-mac-build-host` owns installing it (`from:port`, don't self-bootstrap
-  against a shared box) — precedent: `remote-build-gcc-snow.sh` (GCC 7.5,
-  Snow Leopard).
+Recent progress:
+- **Joystick fallback landed (`ec262ff4`, alephone#2):** `shell.cpp` retries
+  `SDL_Init` without joystick/gamecontroller flags if SDL2 was built
+  `--disable-joystick` (the fleet PPC SDL2 trees). No longer a build/run blocker.
+- **Autotools macOS link fixed (`ec262ff4`):** Cocoa platform files
+  (`csalerts.mm`, `cspaths.mm`) link via `TARGET_DARWIN` in `configure.ac`.
+- **Dedicated server researched (`SERVER.md`, alephone#1):** `standalone_hub`
+  exists upstream, built and run headless via `Dockerfile.hub` in this fork.
+- **CI active and green (`1ef36a0f`, alephone#3):** `.github/workflows/ci-build.yml`
+  runs on all pushes/PRs.
+
+**The sole remaining blocker: a C++17 cross-compiler for PowerPC.**
+`old-mac-build-host` is actively bootstrapping GCC 14.2.0 targeting
+`powerpc-apple-darwin8` on `mini-intel` (`old-mac-build-host#25`), prefix
+`~/gcc14-ppc`, using intermediate host GCC 7.5.0 and `cctools-port`. Do not point
+builds at it until buildhost confirms a successful PPC compile + `nm -u` check.
 
 ## Facts that would otherwise need re-deriving
 
@@ -77,6 +86,16 @@ Two open items block a first build:
   (bench lock, host picker) with `old-mac-build-host` as `from:port` rather
   than writing a sixth hand-rolled copy.
 
+<!-- retro-shared-block: canonical copy lives in retro-agents/briefs/SHARED-BLOCK.md.
+     Do not edit this region in a port repo; it is overwritten by the sync.
+
+     Everything here must be true of EVERY repo it lands in, which is why it is
+     SHORT. Text that has to hold for eight repos converges on the weakest claim,
+     so anything that matters MORE to one repo than another is deliberately left
+     out and stays in that repo's own words, outside these markers. Claiming Mac
+     hardware is the clearest case: it is most of what a port does and one of the
+     eight has no scripts/ directory at all. -->
+
 ## Working alongside the other repos
 
 This repo is one of eight worked on together: five game ports, the private
@@ -105,9 +124,15 @@ item, so it lands in no column at all and looks like work nobody raised. Run
 launched with them. This block is the short version for a human reading this repo
 cold; where the two differ, the briefs win.
 
+<!-- end retro-shared-block -->
+
 ## Read on demand
 
 - `PORTING-PPC.md` — the port plan: target matrix, dependency decisions,
   toolchain resolution, SDL2 investigation, OpenGL ceiling, open questions.
 - `BUILD-HOST.md` — machine roles, Apple SDK downloads, the GCC 14 bootstrap
   recipe on Tiger.
+- `SERVER.md` — dedicated server investigation findings and `standalone_hub`
+  container test.
+- `BUGFIXES.md` — running log of bug fixes in this fork.
+

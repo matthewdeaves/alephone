@@ -293,19 +293,14 @@ and irrelevant here) and compare function **addresses** to `NULL`. `-isysroot` +
       `SDL_NumJoysticks() <= 0` / `active_instances.empty()`. Whether gamepads can be
       made to *work* on 10.5 (IOHIDManager) is a separate, later question — the game
       runs either way.
-- [ ] **THE remaining blocker: a C++17 compiler for PPC.** In progress: buildhost is
-      actively building the GCC 14 cross-compiler (old-mac-build-host#25). Confirmed
-      scope from buildhost 2026-08-24: prefix `~/gcc14-ppc` on mini-intel, target
-      `powerpc-apple-darwin8`, no alephone-specific wiring — a general fleet asset,
-      docs to land alongside their `docs/modern-tools.md`. NOT verified yet — do not
-      point builds at it until buildhost says it passed a real PPC compile plus the
-      `nm -u` 10.3.9 check. The fleet's PPC toolchain is
-      `gcc-4.0`/`gcc-4.2` from Xcode 3.2.6 (C++03) — fine for Quake/Half-Life, which are
-      C; cannot build AO's C++17. Needs GCC 14 cross to `powerpc-apple-darwin`, hosted
-      on a Lion mini or `mini-sl`, reusing the existing 10.3.9/10.4u/10.5 SDKs and
-      Xcode 3.2.6 cctools. Precedent in Matt's own fleet:
-      `old-mac-build-host/scripts/remote-build-gcc-snow.sh` already builds GCC 7.5 on
-      Snow Leopard.
+- [x] ~~**THE remaining blocker: a C++17 compiler for PPC.**~~ **RESOLVED 2026-08-25.**
+      Built and verified on `mini-intel` (`old-mac-build-host#25`): GCC 14.2.0 cross-compiler
+      targeting `powerpc-apple-darwin8`, prefix `/Users/mini/gcc14-ppc`, using intermediate
+      native GCC 7.5.0 and `cctools-port` (`ld64-253.9`). Target `libgcc` and `libstdc++-v3`
+      built cleanly against the 10.3.9 SDK. Hardware-verified: test C and C++ binaries
+      compiled with `-mmacosx-version-min=10.3 -isysroot /Developer/SDKs/MacOSX10.3.9.sdk`,
+      executed successfully on `mini-g4` (PowerPC Tiger 10.4.11), and 100% of undefined
+      symbols verified via `nm -u` against `/Developer/SDKs/MacOSX10.3.9.sdk/usr/lib/libSystem.B.dylib`.
 - [ ] QEMU (`qemu-system-ppc`, Mac99) as a fast test target vs real G3/G4/G5?
 - [x] ~~Big-endian bit-rot survey~~ **DONE 2026-08-23 for post-2015 additions — no
       bit-rot found.** Method: `git log --diff-filter=A --since=2015-09-01` lists 44

@@ -25,11 +25,12 @@ Recent progress:
 - **CI active and green (`1ef36a0f`, alephone#3):** `.github/workflows/ci-build.yml`
   runs on all pushes/PRs.
 
-**The sole remaining blocker: a C++17 cross-compiler for PowerPC.**
-`old-mac-build-host` is actively bootstrapping GCC 14.2.0 targeting
-`powerpc-apple-darwin8` on `mini-intel` (`old-mac-build-host#25`), prefix
-`~/gcc14-ppc`, using intermediate host GCC 7.5.0 and `cctools-port`. Do not point
-builds at it until buildhost confirms a successful PPC compile + `nm -u` check.
+- **PPC C++17 cross-compiler landed (`old-mac-build-host#25`):** GCC 14.2.0 targeting
+  `powerpc-apple-darwin8` is built and verified at `/Users/mini/gcc14-ppc` on
+  `mini-intel`, using intermediate host GCC 7.5.0 and `cctools-port`. Target
+  `libstdc++-v3` and `libgcc` compiled cleanly against `MacOSX10.3.9.sdk`. Real
+  hardware verified on `mini-g4` (Tiger 10.4.11) with static `nm -u` symbol
+  acceptance against 10.3.9 `libSystem`. Toolchain blocker is resolved.
 
 ## Facts that would otherwise need re-deriving
 

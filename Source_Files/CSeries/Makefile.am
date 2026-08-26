@@ -10,9 +10,9 @@ libcseries_a_SOURCES = byte_swapping.h BStream.h csalerts.h		\
   mytm_sdl.cpp
 
 if TARGET_DARWIN
-libcseries_a_SOURCES += csalerts.mm cspaths.mm
+libcseries_a_SOURCES += csalerts_darwin.cpp cspaths_darwin.cpp
 else
-EXTRA_libcseries_a_SOURCES = csalerts.mm cspaths.mm
+EXTRA_libcseries_a_SOURCES = csalerts_darwin.cpp cspaths_darwin.cpp
 endif
 
 AM_CPPFLAGS = -I$(top_srcdir)/Source_Files/Files -I$(top_srcdir)/Source_Files/GameWorld \

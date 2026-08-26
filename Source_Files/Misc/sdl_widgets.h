@@ -48,17 +48,16 @@
 #include	"sdl_dialogs.h"
 #include        "sdl_fonts.h"
 #include        "screen_drawing.h"
-
-#include    "map.h" // for entry_point, for w_levels
-#include	"tags.h"	// for Typecode, for w_file_chooser
-#include	"FileHandler.h"	// for FileSpecifier, for w_file_chooser
-
 #include	<vector>
 #include	<set>
 #include <functional>
 
 #include "metaserver_messages.h" // for GameListMessage, for w_games_in_room and MetaserverPlayerInfo, for w_players_in_room
 #include "network.h" // for prospective_joiner_info
+
+#include    "map.h" // for entry_point, for w_levels
+#include	"tags.h"	// for Typecode, for w_file_chooser
+#include	"FileHandler.h"	// for FileSpecifier, for w_file_chooser
 
 #include	"binders.h"
 

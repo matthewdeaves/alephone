@@ -19,7 +19,18 @@
 #ifndef NETWORK_INTERFACE_H
 #define NETWORK_INTERFACE_H
 
+#ifdef objects
+#pragma push_macro("objects")
+#undef objects
+#define A1_RESTORE_OBJECTS_MACRO
+#endif
+
 #include <asio.hpp>
+
+#ifdef A1_RESTORE_OBJECTS_MACRO
+#pragma pop_macro("objects")
+#undef A1_RESTORE_OBJECTS_MACRO
+#endif
 #include <string>
 #include <optional>
 

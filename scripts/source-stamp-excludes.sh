@@ -1,0 +1,19 @@
+#!/bin/sh
+# scripts/source-stamp-excludes.sh - Excludes for source stamp calculation in alephone
+SOURCE_STAMP_EXCLUDES='.git
+*.o
+*.a
+*.la
+*.deps
+.deps/
+build/
+benchmarks/
+dist/
+.claude/
+.agents/
+.gemini/
+alephone
+alephone-ppc
+alephone-i386
+alephone-x86_64
+data/Scenarios'

@@ -35,7 +35,7 @@ alephone_LDADD = \
 
 standalone_hub_SOURCES = shell.h shell.cpp shell_misc.cpp shell_options.h shell_options.cpp Network/StandaloneHub/standalone_hub_main.cpp
 
-standalone_hub_LDADD = $(alephone_LDADD) Network/StandaloneHub/libstandalonehub.a
+standalone_hub_LDADD = $(alephone_LDADD) Network/StandaloneHub/libstandalonehub.a CSeries/libcseries.a
 
 alephone_tests_SOURCES = shell.h shell.cpp shell_misc.cpp shell_options.h shell_options.cpp $(top_srcdir)/tests/replay_film_test.cpp $(top_srcdir)/tests/main.cpp
 alephone_tests_LDADD = $(alephone_LDADD)

@@ -35,6 +35,17 @@
 #include <SDL2/SDL_endian.h>
 #include <time.h>
 #include <string>
+#include <cmath>
+
+namespace std {
+	using ::round;
+	using ::trunc;
+	using ::log2;
+	using ::exp2;
+	using ::copysign;
+	using ::cbrt;
+	using ::hypot;
+}
 
 #define DEBUG
 

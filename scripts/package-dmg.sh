@@ -39,9 +39,16 @@ create_app_bundle() {
 	mkdir -p "$APP_DIR/Contents/MacOS"
 	mkdir -p "$APP_DIR/Contents/Resources"
 
+	# Info.plist parsing for executable name
+	local EXEC_NAME="$GAME_NAME"
+	if [ -f "$PLIST_SRC" ]; then
+		# Extract CFBundleExecutable using sed
+		EXEC_NAME=$(sed -n '/<key>CFBundleExecutable<\/key>/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' "$PLIST_SRC")
+	fi
+
 	# Binary
-	cp "$BIN_SRC" "$APP_DIR/Contents/MacOS/$GAME_NAME"
-	chmod +x "$APP_DIR/Contents/MacOS/$GAME_NAME"
+	cp "$BIN_SRC" "$APP_DIR/Contents/MacOS/$EXEC_NAME"
+	chmod +x "$APP_DIR/Contents/MacOS/$EXEC_NAME"
 
 	# PkgInfo
 	echo -n "APPL????" > "$APP_DIR/Contents/PkgInfo"
@@ -49,6 +56,13 @@ create_app_bundle() {
 	# Info.plist
 	if [ -f "$PLIST_SRC" ]; then
 		cp "$PLIST_SRC" "$APP_DIR/Contents/Info.plist"
+		# Patch LSMinimumSystemVersion in the copied plist for Panther/Tiger support
+		sed -i '' -e '/<key>LSMinimumSystemVersion<\/key>/{n;s/<string>.*<\/string>/<string>10.3.9<\/string>/;}' "$APP_DIR/Contents/Info.plist"
+		# Replace Xcode variable placeholders that break modern Gatekeeper/LaunchServices
+		sed -i '' -e "s/\$(PRODUCT_BUNDLE_IDENTIFIER)/org.bungie.alephone.${GAME_NAME// /}/g" \
+				  -e "s/A1_DISPLAY_VERSION/${VERSION}/g" \
+				  -e "s/A1_DATE_VERSION/${VERSION}/g" \
+				  "$APP_DIR/Contents/Info.plist"
 	else
 		cat > "$APP_DIR/Contents/Info.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -121,6 +135,7 @@ rm -f "$DMG_PATH"
 hdiutil create -volname "Marathon Games" \
 	-srcfolder "$STAGE_DIR" \
 	-ov -format UDZO \
+	-fs HFS+ \
 	"$DMG_PATH"
 
 echo "================================================================"

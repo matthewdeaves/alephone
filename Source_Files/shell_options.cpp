@@ -193,6 +193,11 @@ std::unordered_map<int, bool> ShellOptions::parse(int argc, char** argv, bool ig
 				}
 			}
 
+			if (!found && arg.find("-psn") == 0)
+			{
+				found = true;
+			}
+
 			if (!found && !ignore_unknown_args)
 			{
 				logFatal("Unrecognized argument '%s'.", arg.c_str());

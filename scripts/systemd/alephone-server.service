@@ -1,0 +1,73 @@
+[Unit]
+Description=Aleph One dedicated server hub (standalone_hub)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alephone
+Group=alephone
+WorkingDirectory=/opt/alephone-server
+
+# No console FIFO, unlike the sibling units in this fleet (q2ded.service,
+# quakespasm-server, ioq3ded, xash-server). That is not an oversight.
+#
+# standalone_hub_main.cpp's main loop never reads stdin, and StandaloneHub
+# (Source_Files/Network/StandaloneHub/) has no command-input path at all --
+# measured by reading both files in full, 2026-08-28 (alephone#9). Wiring a
+# FIFO open on fd 3 the way the other units do would look identical to a
+# working console while silently discarding everything written to it. That
+# is the exact false-success failure mode retro-server-infra's deploy
+# tooling was built to catch (see its dropins/README.md and bin/retro),
+# so it is left out on purpose. Do not add one without an engine change
+# behind it -- a real stdin command interface, or a scripted path through
+# the GUI-only "gatherer" handshake (see the README.txt this ships beside,
+# and SERVER.md in the source repo).
+#
+# This unit gets the process up, listening, and supervised. It does not
+# make the server self-sufficient: a real Aleph One client must still
+# connect as the gatherer and push map/physics/topology data before a match
+# starts. Nothing here can script that today.
+Environment=ALEPHONE_HUB_PORT=4226
+ExecStart=/bin/sh -c 'exec /opt/alephone-server/alephone-server "$ALEPHONE_HUB_PORT"'
+Restart=on-failure
+RestartSec=5s
+
+# Logs and prefs land in $HOME/.alephone (Source_Files/CSeries/cspaths_sdl.cpp);
+# there is no XDG override to reach for here, just give it a real HOME.
+# Same shape as quake2's StateDirectory/HOME fix (q2ded.service) for the
+# same reason: a service user with no writable $HOME makes the engine's
+# own directory creation fail on first write.
+StateDirectory=alephone-server
+StateDirectoryMode=0750
+Environment=HOME=/var/lib/alephone-server
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+RestrictSUIDSGID=true
+UMask=0077
+
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete @cpu-emulation @debug @mount @swap @reboot @module
+SystemCallErrorNumber=EPERM
+
+MemoryMax=1G
+TasksMax=64
+LimitNOFILE=1024
+LimitCORE=0
+
+[Install]
+WantedBy=multi-user.target

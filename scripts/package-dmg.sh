@@ -8,7 +8,12 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo "1.11")"
+# --match restricts to client-tag patterns (release-* / vX.Y.Z) so this never
+# picks up a server-vX.Y.Z tag pointing at the same commit -- that collision
+# is real: server-v1.0.0 (alephone#9) and this script's HEAD landed on the
+# same commit, and a bare `git describe` named a CLIENT dmg
+# "Marathon-OldMac-server-v1.0.0.dmg" (measured 2026-08-28).
+VERSION="$(git describe --tags --always --dirty --match 'release-*' --match 'v[0-9]*' 2>/dev/null || echo "1.11")"
 DIST_DIR="$REPO_ROOT/dist"
 STAGE_DIR="$REPO_ROOT/dist/staging-dmg"
 DMG_NAME="Marathon-OldMac-${VERSION}.dmg"

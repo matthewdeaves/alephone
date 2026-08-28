@@ -32,7 +32,12 @@ case "$ARCH" in
 esac
 
 if [ -z "$VERSION" ]; then
-	VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo "1.11")"
+	# --match restricts to server-tag patterns so this never picks up a
+	# client release-*/vX.Y.Z tag pointing at the same commit (see the
+	# matching note in package-dmg.sh -- same class of collision, other
+	# direction). In practice every caller passes --version explicitly;
+	# this fallback only matters if one doesn't.
+	VERSION="$(git describe --tags --always --dirty --match 'server-v*' 2>/dev/null || echo "1.11")"
 fi
 GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
 
@@ -106,22 +111,41 @@ fi
 cp "$WORK_DIR/alephone-server" "$STAGE_DIR/alephone-server"
 chmod +x "$STAGE_DIR/alephone-server"
 
+mkdir -p "$STAGE_DIR/systemd"
+cp "$REPO_ROOT/scripts/systemd/alephone-server.service" "$STAGE_DIR/systemd/alephone-server.service"
+
 cat > "$STAGE_DIR/README.txt" << EOF
-Aleph One Dedicated Server (standalone_hub)
+Aleph One Dedicated Server -- standalone_hub, the star-topology network hub.
 Version: ${VERSION}
 Architecture: Linux ${ARCH}
 
-Usage:
-  ./alephone-server -p <port> [options]
+Usage (measured from Source_Files/Network/StandaloneHub/standalone_hub_main.cpp
+-- this is the real CLI, not the -p/-n/-m/-g flags an earlier draft of this
+README invented):
 
-Options:
-  -p, --port PORT          Port number to listen on (required)
-  -n, --name NAME          Server / Room name announced on metaserver
-  -m, --metaserver HOST    Metaserver hostname (default: metaserver.lhowon.org)
-  -g, --game TYPE          Marathon game type (1 = Marathon, 2 = M2, 3 = Infinity)
+  ./alephone-server <port>
+
+That is the entire interface: one required positional UDP/TCP port number,
+nothing else. Default in this release's systemd/alephone-server.service is
+4226 (the engine's own DEFAULT_GAME_PORT); override by editing
+ALEPHONE_HUB_PORT= there or in a drop-in.
+
+Two real limitations of this binary, not packaging gaps -- see SERVER.md in
+the source repo for the full writeup:
+
+1. No admin console. The main loop never reads stdin (measured: no
+   getline/fgets/cin/console anywhere in standalone_hub_main.cpp or
+   StandaloneHub.{h,cpp}). Unlike the other four ports' dedicated servers,
+   there is nothing to send a FIFO-fed command to.
+2. Not self-hosting. Starting the process only makes it listen and wait: a
+   real Aleph One client must connect as the "gatherer" and push map/physics/
+   topology data over the network (StandaloneHub::WaitForGatherer(),
+   GetGameDataFromGatherer()) before any match runs. That handshake is
+   GUI-only in the current client -- nothing here can script it yet.
 
 Running with systemd:
-  See retro-server-infra deployment scripts for service configurations.
+  systemd/alephone-server.service in this tarball. Deployment convention
+  (drop-ins, console handling) lives in retro-server-infra.
 EOF
 
 cat > "$STAGE_DIR/BUILD-INFO.txt" << EOF

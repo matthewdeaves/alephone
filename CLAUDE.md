@@ -17,22 +17,16 @@ For situational context, consult the specific rule files in `.claude/rules/`:
 - `SERVER.md` — dedicated server investigation findings.
 - `BUGFIXES.md` — running log of bug fixes in this fork.
 
-<!-- retro-shared-block: canonical copy lives in retro-agents/briefs/SHARED-BLOCK.md.
-     Do not edit this region in a port repo; it is overwritten by the sync.
-
-     Everything here must be true of EVERY repo it lands in, which is why it is
-     SHORT. Text that has to hold for eight repos converges on the weakest claim,
-     so anything that matters MORE to one repo than another is deliberately left
-     out and stays in that repo's own words, outside these markers. Claiming Mac
-     hardware is the clearest case: it is most of what a port does and one of the
-     eight has no scripts/ directory at all. -->
-
 ## Working alongside the other repos
 
 This repo is one of eight worked on together: five game ports, the private
 `retro-server-infra` which runs the servers, the private `old-mac-build-host`
 which owns the machines, and `retro-agents` which runs the sessions. One board
-covers all eight: <https://github.com/users/matthewdeaves/projects/8>.
+covers all eight: <https://github.com/users/matthewdeaves/projects/8>. Top-level
+project goals (PPC/Intel/Apple Silicon, OS X 10.3+, frame rate vs. features) are
+the `retro-agents` manager's call, not this repo's; hardware testing spans every
+dual-boot OS alias on the G3 and G5 Dual 2.7 machines, not just whichever OS
+happens to be booted right now.
 
 Nothing arbitrates WORKING TREES. Two sessions in one repo can collide silently,
 and a sync can write into your tree mid-task, so stage by name and never
@@ -47,12 +41,16 @@ approved: work it. STOP AT `Review` — `Done` is the user's, not yours. Write
 `Refs #12` in commit messages, never `Closes` or `Fixes`, or GitHub closes the
 issue behind your back while the column still says Review.
 
-Filing an issue does NOT put it on the board and nothing sets a status on a new
-item, so it lands in no column at all and looks like work nobody raised. Run
-`retro-agents/bin/board-add.sh <repo>#<n>` after filing, every time.
+The shared GitHub account runs on a strict 5000/hr GraphQL budget. Filing an
+issue does NOT put it on the board and nothing sets a status on a new item, so
+it lands in no column at all and looks like work nobody raised. Run
+`retro-agents/bin/board-add.sh <repo>#<n>` after filing, every time, and never
+run `gh project item-list`/`item-edit` — those burn the shared GraphQL budget;
+`board.sh`/`board-add.sh`/`board-move.sh` are REST and free.
 
 **The full rules are in `retro-agents/briefs/`, not here.** Every session is
-launched with them. This block is the short version for a human reading this repo
-cold; where the two differ, the briefs win.
-
-<!-- end retro-shared-block -->
+launched with them. This section used to be synced verbatim from a canonical
+copy (`retro-agents/briefs/SHARED-BLOCK.md`); that sync tool was retired
+2026-08-28 (zero adopters fleet-wide, and it never actually covered this repo —
+old-mac-build-host#31), so this is now this repo's own hand-maintained copy;
+where the briefs and this file differ, the briefs win.

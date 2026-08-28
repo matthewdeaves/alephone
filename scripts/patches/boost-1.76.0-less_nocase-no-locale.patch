@@ -1,0 +1,32 @@
+--- a/boost/property_tree/detail/ptree_utils.hpp
++++ b/boost/property_tree/detail/ptree_utils.hpp
+@@ -17,6 +17,7 @@
+ #include <string>
+ #include <algorithm>
+ #include <locale>
++#include <cctype>
+ 
+ namespace boost { namespace property_tree { namespace detail
+ {
+@@ -25,10 +26,19 @@
+     struct less_nocase
+     {
+         typedef typename T::value_type Ch;
+-        std::locale m_locale;
++        // PPC/GCC14/Leopard fix (alephone#11, 2026-08-28): the locale-based
++        // form below (std::toupper(Ch, const std::locale&)) resolves to a
++        // virtual call through a std::locale facet. On this cross-compiled
++        // PPC target running on Mac OS X 10.5 that indirect call lands in
++        // garbage (EXC_BAD_INSTRUCTION, ctr register pointing into RTTI
++        // data instead of code) -- a real toolchain/ABI bug, not something
++        // fixable from application code. Property tree keys here are plain
++        // ASCII MML/XML tag names, so a locale-independent C toupper() is
++        // exactly as correct and has no virtual dispatch to go wrong.
+         inline bool operator()(Ch c1, Ch c2) const
+         {
+-            return std::toupper(c1, m_locale) < std::toupper(c2, m_locale);
++            return std::toupper(static_cast<unsigned char>(c1)) <
++                   std::toupper(static_cast<unsigned char>(c2));
+         }
+         inline bool operator()(const T &t1, const T &t2) const
+         {

@@ -186,6 +186,34 @@ REMOTE_BUILD
 		rsync -az "$BUILD_HOST:~/alephone-build-x86_64/Source_Files/alephone" "$REPO_ROOT/build/alephone-x86_64"
 		echo "[build] fetched build/alephone-x86_64"
 		otool -hv "$REPO_ROOT/build/alephone-x86_64"
+
+		# SDL2 is the one dependency of the 6 in legacy-mac-hardware.md that is
+		# NOT statically linked on x86_64 (everything else -- SDL2_ttf, boost,
+		# asio, libsndfile, openal-soft -- builds --enable-static per
+		# build-deps-intel.sh). It links against $SDL_DIR/lib on the build
+		# host as a bare absolute path, which only exists on machines that
+		# happen to share that exact filesystem layout -- measured 2026-08-28
+		# (alephone#5): a fresh x86_64 build crashed at launch on imac-2019
+		# with `Library not loaded: /Users/mini/oldmac/sdl2-x86_64/lib/
+		# libSDL2-2.0.0.dylib`, dyld "Library missing". Fetch the actual
+		# dylib alongside the binary so package-dmg.sh can bundle it into
+		# each app's Contents/Frameworks and retarget the load command to
+		# @executable_path -- the same self-contained shape quakespasm ships
+		# SDL.framework in, not a fixed host path.
+		mkdir -p "$REPO_ROOT/build/deps-x86_64"
+		scp -q "$BUILD_HOST:/Users/mini/oldmac/sdl2-x86_64/lib/libSDL2-2.0.0.dylib" \
+			"$REPO_ROOT/build/deps-x86_64/libSDL2-2.0.0.dylib"
+		echo "[build] fetched build/deps-x86_64/libSDL2-2.0.0.dylib"
+
+		# Retarget on the THIN x86_64 slice, before lipo -- not later, on the
+		# fat binary, in package-dmg.sh. Apple's current install_name_tool
+		# cannot parse the PPC cross-compiled slice's load commands at all
+		# ("malformed load command 0 (cmdsize is zero)", measured 2026-08-28)
+		# and aborts on the whole fat file once ppc is lipo'd in.
+		install_name_tool -change /Users/mini/oldmac/sdl2-x86_64/lib/libSDL2-2.0.0.dylib \
+			@executable_path/../Frameworks/libSDL2-2.0.0.dylib \
+			"$REPO_ROOT/build/alephone-x86_64"
+		echo "[build] retargeted libSDL2 load command to @executable_path"
 		;;
 
 	fat)

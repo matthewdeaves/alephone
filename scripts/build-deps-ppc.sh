@@ -25,6 +25,8 @@ trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/pick-build-host.sh" -
 echo "[deps-ppc] syncing source archives to $BUILD_HOST..."
 ssh "$BUILD_HOST" 'mkdir -p ~/alephone-deps-src ~/alephone-ppc-deps'
 rsync -az "$REPO_ROOT/.deps/" "$BUILD_HOST:~/alephone-deps-src/"
+scp -q "$REPO_ROOT/scripts/patches/boost-1.76.0-less_nocase-no-locale.patch" \
+	"$BUILD_HOST:/tmp/boost-1.76.0-less_nocase-no-locale.patch"
 
 echo "[deps-ppc] running cross-compilation on $BUILD_HOST..."
 ssh "$BUILD_HOST" 'bash -s' << 'REMOTE_SCRIPT'
@@ -114,7 +116,15 @@ if [ ! -f "$PREFIX/lib/libboost_filesystem.a" ]; then
     
     echo "  Copying Boost headers..."
     cp -R boost "$PREFIX/include/"
-    
+
+    # alephone#11, 2026-08-28: boost::property_tree::iptree's default
+    # comparator (less_nocase) does a locale-facet virtual call that this
+    # PPC cross-toolchain miscompiles -- EXC_BAD_INSTRUCTION on real 10.5
+    # hardware, indirect call landing in RTTI data instead of code. Every
+    # MML/XML config file load goes through it (InfoTree : iptree), so this
+    # isn't optional. See scripts/patches/ for the rationale in full.
+    patch -p1 -d "$PREFIX/include" < /tmp/boost-1.76.0-less_nocase-no-locale.patch
+
     echo "  Compiling Boost.System..."
     $CXX $COMMON_CXXFLAGS -I. -c libs/system/src/error_code.cpp -o error_code.o
     $AR rc "$PREFIX/lib/libboost_system.a" error_code.o

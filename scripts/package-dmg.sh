@@ -103,6 +103,35 @@ EOF
 	# Document icons
 	cp "$REPO_ROOT/Xcode/App_Resources/DataFileIcons/"*.icns "$APP_DIR/Contents/Resources/" 2>/dev/null || true
 
+	# Bundle the x86_64 slice's one dynamic dependency (SDL2 -- everything
+	# else statically links, see build.sh's fetch step) so the app is
+	# self-contained instead of pointing at a bare build-host-absolute path.
+	# Measured 2026-08-28 (alephone#5): without this, the fat binary launches
+	# fine on machines that happen to share the build host's exact directory
+	# layout and crashes with dyld "Library not loaded" everywhere else --
+	# including imac-2019, the P0 launch-reliability target. Same shape as
+	# quakespasm bundling SDL.framework into Contents/MacOS and retargeting
+	# to @executable_path.
+	SDL2_DYLIB="$REPO_ROOT/build/deps-x86_64/libSDL2-2.0.0.dylib"
+	if [ -f "$SDL2_DYLIB" ]; then
+		mkdir -p "$APP_DIR/Contents/Frameworks"
+		cp "$SDL2_DYLIB" "$APP_DIR/Contents/Frameworks/libSDL2-2.0.0.dylib"
+		chmod +w "$APP_DIR/Contents/Frameworks/libSDL2-2.0.0.dylib"
+		install_name_tool -id "@executable_path/../Frameworks/libSDL2-2.0.0.dylib" \
+			"$APP_DIR/Contents/Frameworks/libSDL2-2.0.0.dylib"
+		# The @executable_path retarget itself happens earlier, on the thin
+		# x86_64 slice in build.sh, before lipo -- NOT here on the final
+		# fat binary. Apple's current install_name_tool cannot parse this
+		# PPC cross-compiled slice's load commands at all ("malformed load
+		# command 0 (cmdsize is zero)", measured 2026-08-28) and aborts on
+		# the whole fat file, ppc included. Safe to run -id on this bundled
+		# dylib here since it's a standalone x86_64-only file with no PPC
+		# content to trip over.
+	else
+		echo "WARNING: $SDL2_DYLIB not found -- x86_64 slice will crash at" >&2
+		echo "  launch off this build host. Run scripts/build.sh x86_64 first." >&2
+	fi
+
 	# Strip any quarantine attribute that hitched a ride on a source asset
 	# (icons, data files) before we sign — codesign rejects a quarantined tree.
 	# Canonical primitive (old-mac-build-host#34); falls back to inline xattr

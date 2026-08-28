@@ -10,6 +10,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_HOST="mini-intel"
 echo "[deps-intel] building x86_64 Intel dependencies on $BUILD_HOST..."
 
+scp -q "$REPO_ROOT/scripts/patches/boost-1.76.0-less_nocase-no-locale.patch" \
+	"$BUILD_HOST:/tmp/boost-1.76.0-less_nocase-no-locale.patch"
+
 ssh "$BUILD_HOST" 'bash -s' << 'REMOTE_SCRIPT'
 set -euo pipefail
 
@@ -82,6 +85,14 @@ EOF
         stage
     cp stage/lib/libboost_*.a "$PREFIX/lib/"
     cp -R boost "$PREFIX/include/"
+
+    # alephone#11, 2026-08-28: same fix as build-deps-ppc.sh's boost step --
+    # the crash was only reproduced on PPC/Leopard so far, but this is a
+    # locale-facet virtual call in header-only template code (iptree's
+    # default comparator), compiled fresh into whatever links against it.
+    # No reason to leave the x86_64 slice carrying the same landmine
+    # unpatched. See scripts/patches/ for the rationale in full.
+    patch -p1 -d "$PREFIX/include" < /tmp/boost-1.76.0-less_nocase-no-locale.patch
 fi
 
 echo "=== [4/6] Asio 1.28.0 ==="

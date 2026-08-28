@@ -59,13 +59,29 @@ mkdir -p "$STAGE_DIR" "$DIST_DIR" "$WORK_DIR"
 echo "[1/3] Ensuring build container is available..."
 DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t "$IMAGE" -f scripts/docker/server-build.Dockerfile scripts/docker >/dev/null
 
+# retro-server-infra#(alephone#9, 2026-08-28): the default -lboost_filesystem
+# link is dynamic, so the binary depends on whatever boost SONAME this
+# container has (Debian 11 ships 1.74.0) -- infra deploy target has 1.83.0,
+# different SONAME, refuses to run rather than risk an ABI mismatch via a
+# symlink workaround. Same class of bug as the client-side build-host-
+# absolute SDL2 path (alephone#5) -- a dependency that only happens to work
+# on the machine that built it. Fix: delete the .so right after apt installs
+# it, in the same throwaway container, before configure/make ever run --
+# with no libboost_filesystem.so left to find, the linker has nothing left
+# to resolve -lboost_filesystem against except the static .a apt installed
+# alongside it, so configure detects static, and the final link needs
+# nothing from this container that is not already inside the binary.
+# Simpler and more robust than passing the .a path in explicitly (an
+# earlier version of this script tried that and found the wrong
+# architectures copy since more than one boost install existed in the
+# image) -- deleting the .so removes the ambiguity outright.
 echo "[2/3] Compiling standalone_hub inside container..."
 if [ "$ARCH" = "x86_64" ]; then
 	docker run --rm \
 		-v "$REPO_ROOT:/workspace:ro" \
 		-v "$WORK_DIR:/build" \
 		-w /build \
-		"$IMAGE" bash -c "
+		"$IMAGE" bash -c '
 			set -euo pipefail
 			dpkg --add-architecture amd64
 			apt-get update >/dev/null 2>&1
@@ -73,39 +89,43 @@ if [ "$ARCH" = "x86_64" ]; then
 				libboost-filesystem-dev:amd64 libboost-system-dev:amd64 \
 				libsdl2-dev:amd64 libsdl2-ttf-dev:amd64 libopenal-dev:amd64 \
 				libsndfile1-dev:amd64 libpng-dev:amd64 zlib1g-dev:amd64 >/dev/null 2>&1
+			find /usr/lib/x86_64-linux-gnu -name "libboost_filesystem.so*" -delete
+			find /usr/lib/x86_64-linux-gnu -name "libboost_system.so*" -delete
 			mkdir -p /tmp/src
 			cp -a /workspace/. /tmp/src/
 			cd /tmp/src
-			find Source_Files -name '*.o' -delete -o -name '*.a' -delete || true
+			find Source_Files -name "*.o" -delete -o -name "*.a" -delete || true
 			PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig ./configure --host=x86_64-linux-gnu \
 				--enable-standalone-hub --disable-opengl \
 				--without-vpx --without-matroska --without-ebml --without-libyuv --without-nfd \
 				--without-curl --without-zzip --without-miniupnpc --without-sdl_image --disable-steam --without-catch2 \
 				CC=x86_64-linux-gnu-gcc CXX=x86_64-linux-gnu-g++ \
-				CXXFLAGS='-O2 -std=c++17' OBJCXXFLAGS='-O2 -std=c++17' LIBS='-lpthread'
-			make -j\$(nproc)
+				CXXFLAGS="-O2 -std=c++17" OBJCXXFLAGS="-O2 -std=c++17" LIBS="-lpthread"
+			make -j$(nproc)
 			x86_64-linux-gnu-strip Source_Files/standalone_hub
 			cp Source_Files/standalone_hub /build/alephone-server
-		"
+		'
 else
 	docker run --rm \
 		-v "$REPO_ROOT:/workspace:ro" \
 		-v "$WORK_DIR:/build" \
 		-w /build \
-		"$IMAGE" bash -c "
+		"$IMAGE" bash -c '
 			set -euo pipefail
+			find /usr/lib -name "libboost_filesystem.so*" -delete
+			find /usr/lib -name "libboost_system.so*" -delete
 			mkdir -p /tmp/src
 			cp -a /workspace/. /tmp/src/
 			cd /tmp/src
-			find Source_Files -name '*.o' -delete -o -name '*.a' -delete || true
+			find Source_Files -name "*.o" -delete -o -name "*.a" -delete || true
 			./configure --enable-standalone-hub --disable-opengl \
 				--without-vpx --without-matroska --without-ebml --without-libyuv --without-nfd \
 				--without-curl --without-zzip --without-miniupnpc --without-sdl_image --disable-steam --without-catch2 \
-				CXXFLAGS='-O2 -std=c++17' OBJCXXFLAGS='-O2 -std=c++17' LIBS='-lpthread'
-			make -j\$(nproc)
+				CXXFLAGS="-O2 -std=c++17" OBJCXXFLAGS="-O2 -std=c++17" LIBS="-lpthread"
+			make -j$(nproc)
 			strip Source_Files/standalone_hub
 			cp Source_Files/standalone_hub /build/alephone-server
-		"
+		'
 fi
 
 cp "$WORK_DIR/alephone-server" "$STAGE_DIR/alephone-server"

@@ -185,6 +185,12 @@ void start_extravision_effect(bool out);
 
 void render_screen(short ticks_elapsed);
 
+// alephone#12: true when a real OpenGL context is active but the GPU has no
+// GLSL/shader support (fixed-function-only hardware -- G3/G4-class cards).
+// render.cpp checks this to route to the classic Rasterizer_OGL/Render_Classic
+// pair instead of the shader renderer. Only meaningful once OGL_IsActive().
+bool OGL_UseClassicRenderer(void);
+
 void toggle_overhead_map_display_status(void);
 
 // Returns whether the size scale had been changed

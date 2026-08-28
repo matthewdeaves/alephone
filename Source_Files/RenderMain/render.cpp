@@ -466,7 +466,14 @@ void render_view(
 			// LP addition: set the current rasterizer to whichever is appropriate here
 			RasterizerClass *RasPtr;
 #ifdef HAVE_OPENGL
-			if (OGL_IsActive())
+			// alephone#12: a real GL context with no GLSL support (G3/G4-class
+			// fixed-function-only GPUs) uses the classic Rasterizer_OGL, not
+			// software -- OGL_UseClassicRenderer() is screen.cpp's runtime
+			// capability check (real GL context confirmed, shader extensions
+			// confirmed absent), same signal RenPtr below uses.
+			if (OGL_IsActive() && OGL_UseClassicRenderer())
+				RasPtr = &Rasterizer_OGL;
+			else if (OGL_IsActive())
 				RasPtr = &Rasterizer_Shader;
 			else
 			{
@@ -477,16 +484,16 @@ void render_view(
 #ifdef HAVE_OPENGL
 			}
 #endif
-			
+
 			// Set its view:
 			RasPtr->SetView(*view);
-			
+
 			// Start rendering main view
 			RasPtr->Begin();
-			
+
 			// LP: now from the clipping/rasterizer class
-#ifdef HAVE_OPENGL			
-			RenderRasterizerClass *RenPtr = (graphics_preferences->screen_mode.acceleration == _opengl_acceleration) ? &Render_Shader : &Render_Classic;
+#ifdef HAVE_OPENGL
+			RenderRasterizerClass *RenPtr = (graphics_preferences->screen_mode.acceleration == _opengl_acceleration && !OGL_UseClassicRenderer()) ? &Render_Shader : &Render_Classic;
 #else
 			RenderRasterizerClass *RenPtr = &Render_Classic;
 #endif

@@ -118,6 +118,7 @@ static bool in_game = false;	// Flag: menu (fixed 640x480) or in-game (variable 
 
 static int failed_multisamples = 0;		// remember when GL multisample setting didn't succeed
 static bool passed_shader = false;      // remember when we passed Shader tests
+static bool use_classic_ogl = false;    // alephone#12: no GLSL, but a real GL context works
 
 #include "screen_shared.h"
 
@@ -332,6 +333,11 @@ bool Screen::lua_hud()
 bool Screen::openGL()
 {
 	return screen_mode.acceleration != _no_acceleration;
+}
+
+bool OGL_UseClassicRenderer(void)
+{
+	return use_classic_ogl;
 }
 
 bool Screen::fifty_percent()
@@ -889,6 +895,7 @@ static void change_screen_mode(int width, int height, int depth, bool nogl, bool
 #ifdef HAVE_OPENGL
 	if (!nogl && screen_mode.acceleration != _no_acceleration) {
 		passed_shader = false;
+		use_classic_ogl = false;
 		flags |= SDL_WINDOW_OPENGL;
 		SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
 		SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
@@ -972,15 +979,28 @@ static void change_screen_mode(int width, int height, int depth, bool nogl, bool
 #endif
 		if (!OGL_CheckExtension("GL_ARB_vertex_shader") || !OGL_CheckExtension("GL_ARB_fragment_shader") || !OGL_CheckExtension("GL_ARB_shader_objects") || !OGL_CheckExtension("GL_ARB_shading_language_100"))
 		{
-			logWarning("OpenGL (Shader) renderer is not available");
-			fprintf(stderr, "WARNING: Failed to initialize OpenGL renderer\n");
-			fprintf(stderr, "WARNING: Retrying with Software renderer\n");
-			screen_mode.acceleration = graphics_preferences->screen_mode.acceleration = _no_acceleration;
-			main_screen = SDL_CreateWindow(get_application_name().c_str(),
-										   SDL_WINDOWPOS_CENTERED,
-										   SDL_WINDOWPOS_CENTERED,
-										   sdl_width, sdl_height,
-										   flags);
+			// alephone#12: this used to fall straight through to full
+			// software rendering -- the only other option that existed.
+			// It no longer is: a real GL context already exists right here
+			// (main_screen != NULL, context_created) on ANY OpenGL
+			// implementation ever shipped, because GL_POLYGON/glVertexPointer/
+			// glDrawArrays are core OpenGL 1.1, not an extension -- that is
+			// exactly the fixed-function path Rasterizer_OGL_Class/
+			// OGL_Render.cpp already implement (dormant in this tree since
+			// the shader renderer replaced it as the only wired-up path,
+			// commit c37232bc, 2009). No further capability probe needed:
+			// if we got this far, classic GL works. Keep the existing
+			// context/window and use it, instead of tearing it down for
+			// software.
+			logWarning("OpenGL (Shader) renderer is not available -- using classic fixed-function OpenGL instead");
+			fprintf(stderr, "WARNING: GLSL not available; using classic (fixed-function) OpenGL renderer\n");
+			use_classic_ogl = true;
+			// Deliberately NOT touching passed_shader here (stays false) --
+			// it is write-only elsewhere in this file (never read by
+			// anything, checked repo-wide), so it carries no behavior
+			// either way. Leaving it alone says plainly what actually
+			// happened: shader tests did not pass, a different renderer
+			// is being used instead.
 		}
 		else
 		{

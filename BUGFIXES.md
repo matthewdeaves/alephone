@@ -3,6 +3,19 @@
 One short entry per real bug fixed in this fork: what it was, what the fix was.
 Newest first.
 
+- **DMGs built by `package-dmg.sh` could not be mounted at all on real 10.3.9
+  Panther hardware** (`hdiutil: attach failed - no mountable file systems`)
+  (alephone#5, alephone#7). `hdiutil create` with no explicit `-layout`
+  defaults to GPT (protective MBR + GUID partition table) on any reasonably
+  modern build host (verified on macOS 26.x here) — GPT postdates every
+  PowerPC Mac; it was introduced for the first Intel Macs in 2006. Tiger
+  10.4+ can read GPT (it had to, to support early Intel Macs), which is
+  exactly why this went unnoticed until testing landed on a real G3 running
+  Panther. Fix: `hdiutil create ... -layout SPUD`, which is hdiutil's name
+  for the classic Apple Partition Map. Verified mounting on real 10.3.9
+  hardware before and after the fix (fails/succeeds respectively), and that
+  Tiger and later still mount it fine.
+
 - **Every DMG this pipeline built was software-renderer-only, on every architecture** (alephone#6).
   `scripts/build.sh` hardcoded `--disable-opengl` for both the ppc and x86_64
   configure invocations. Not a PPC-only issue: this forced software rendering

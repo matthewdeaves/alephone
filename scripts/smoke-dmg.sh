@@ -23,7 +23,15 @@ OBSERVE_SECS="${3:-8}"
 
 echo "[smoke] $HOST: launching \"$APP_NAME\" via LaunchServices (open)..."
 
-ssh "$HOST" bash -s -- "$APP_NAME" "$OBSERVE_SECS" << 'REMOTE_SMOKE'
+# `ssh host cmd arg1 arg2` does NOT pass arg1/arg2 through as an argv array --
+# ssh concatenates its trailing arguments into ONE string with plain spaces
+# and the remote shell re-splits that string itself. A space-containing value
+# ("Marathon Infinity") silently breaks into two args on the far side unless
+# each one is individually shell-quoted first (measured 2026-08-28: this
+# exact bug made an "Marathon Infinity" test silently re-run plain "Marathon"
+# instead). printf %q escapes each value into one safe token before ssh joins
+# them.
+ssh "$HOST" bash -s -- "$(printf '%q' "$APP_NAME")" "$(printf '%q' "$OBSERVE_SECS")" << 'REMOTE_SMOKE'
 # Not pipefail: some fleet targets (Tiger 10.4's stock /bin/bash 2.05b)
 # predate it and abort the whole `set` with "invalid option name" on a bare
 # `set -uo pipefail`, silently leaving -u unset too (see deploy-dmg.sh).

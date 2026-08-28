@@ -165,10 +165,19 @@ fi
 echo "[4/4] Creating DMG disk image..."
 DMG_PATH="$DIST_DIR/$DMG_NAME"
 rm -f "$DMG_PATH"
+# -layout SPUD: classic Apple Partition Map, not hdiutil's modern default
+# (GPT, with a protective MBR + GUID partition table). GPT postdates every
+# PowerPC Mac -- it was introduced for the first Intel Macs (2006) -- so a
+# GPT-schemed DMG built with hdiutil's bare default on any host running a
+# reasonably modern macOS (verified on 26.x here) fails to mount at all on
+# real 10.3.9 Panther hardware ("no mountable file systems"), the project's
+# primary target. Tiger 10.4+ can read GPT (it had to, for early Intel Macs),
+# which is why this went unnoticed until testing landed on a real G3.
 hdiutil create -volname "Marathon Games" \
 	-srcfolder "$STAGE_DIR" \
 	-ov -format UDZO \
 	-fs HFS+ \
+	-layout SPUD \
 	"$DMG_PATH"
 
 echo "================================================================"

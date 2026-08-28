@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# package-dmg.sh - Package Marathon 1, 2, Infinity into standalone .app bundles and DMG
+# package-dmg.sh - Package Marathon 1, 2, Infinity into one Aleph One.app
+# (built-in scenario chooser picks between them) and a DMG
 # usage: scripts/package-dmg.sh
 # output: dist/Marathon-OldMac.dmg
 
@@ -20,7 +21,7 @@ DMG_NAME="Marathon-OldMac-${VERSION}.dmg"
 
 mkdir -p "$DIST_DIR" "$STAGE_DIR"
 rm -rf "$STAGE_DIR"
-mkdir -p "$STAGE_DIR/Marathon" "$STAGE_DIR/Marathon 2" "$STAGE_DIR/Marathon Infinity"
+mkdir -p "$STAGE_DIR/Aleph One/Scenarios"
 
 # Ensure binary exists (use fat binary if available, else PPC binary)
 BIN_SRC="$REPO_ROOT/build/alephone"
@@ -158,26 +159,29 @@ EOF
 	fi
 }
 
-echo "[1/4] Creating Marathon.app..."
-create_app_bundle "Marathon" \
-	"$STAGE_DIR/Marathon/Marathon.app" \
-	"$REPO_ROOT/Xcode/App_Resources/Marathon1/Marathon.icns" \
-	"$REPO_ROOT/Xcode/App_Resources/Marathon1/Info.plist"
-rsync -a --exclude='.git' /tmp/data-marathon/ "$STAGE_DIR/Marathon/"
-
-echo "[2/4] Creating Marathon 2.app..."
-create_app_bundle "Marathon 2" \
-	"$STAGE_DIR/Marathon 2/Marathon 2.app" \
-	"$REPO_ROOT/Xcode/App_Resources/Marathon2/Marathon 2.icns" \
-	"$REPO_ROOT/Xcode/App_Resources/Marathon2/Info.plist"
-rsync -a --exclude='.git' /tmp/data-marathon-2/ "$STAGE_DIR/Marathon 2/"
-
-echo "[3/4] Creating Marathon Infinity.app..."
-create_app_bundle "Marathon Infinity" \
-	"$STAGE_DIR/Marathon Infinity/Marathon Infinity.app" \
-	"$REPO_ROOT/Xcode/App_Resources/Marathon3/Marathon Infinity.icns" \
-	"$REPO_ROOT/Xcode/App_Resources/Marathon3/Info.plist"
-rsync -a --exclude='.git' /tmp/data-marathon-infinity/ "$STAGE_DIR/Marathon Infinity/"
+# alephone#13: one app, not three. The engine's own built-in ScenarioChooser
+# (Source_Files/Misc/ScenarioChooser.{h,cpp}) already does exactly this --
+# scans the app's own containing folder for a "primary" scenario
+# (add_primary_scenario, shell.cpp) plus a Scenarios/ subfolder for
+# everything else (add_directory: "assume each visible subdirectory is a
+# scenario") and shows a pick screen if it finds more than one. Never wired
+# up in this fork's packaging before now -- was building three separate app
+# bundles instead, each with its own copy of the engine binary.
+#
+# Xcode/App_Resources/AlephOne/{AlephOne.icns,Info.plist} is upstream's own
+# umbrella identity for exactly this shape (CFBundleName "Aleph One",
+# distinct from any one game's), not something invented for this fork.
+echo "[1/2] Creating Aleph One.app (Marathon 1 as primary scenario, 2/Infinity via the built-in chooser)..."
+create_app_bundle "Aleph One" \
+	"$STAGE_DIR/Aleph One/Aleph One.app" \
+	"$REPO_ROOT/Xcode/App_Resources/AlephOne/AlephOne.icns" \
+	"$REPO_ROOT/Xcode/App_Resources/AlephOne/Info.plist"
+# Primary scenario: siblings of the .app itself (matches add_primary_scenario
+# using kPathDefaultData, which resolves to the app's own containing folder).
+rsync -a --exclude='.git' /tmp/data-marathon/ "$STAGE_DIR/Aleph One/"
+# Everything else: one subdirectory per scenario under Scenarios/.
+rsync -a --exclude='.git' /tmp/data-marathon-2/ "$STAGE_DIR/Aleph One/Scenarios/Marathon 2/"
+rsync -a --exclude='.git' /tmp/data-marathon-infinity/ "$STAGE_DIR/Aleph One/Scenarios/Marathon Infinity/"
 
 # Add README
 cat > "$STAGE_DIR/README.txt" << 'EOF'
@@ -185,7 +189,9 @@ Aleph One — Marathon 1, 2, & Infinity for Mac OS X
 Universal Fat Binary spanning PowerPC (10.3.9 Panther / 10.4 Tiger / 10.5 Leopard) and Intel (10.4 through 10.7+).
 
 Running the games:
-  - Double-click Marathon.app, Marathon 2.app, or Marathon Infinity.app inside their respective folders.
+  - Double-click Aleph One.app. A scenario picker shows Marathon, Marathon 2,
+    and Marathon Infinity -- pick one to play. Each remembers its own saved
+    games and preferences separately.
 EOF
 
 # Defense in depth: strip quarantine from the whole staged tree (scenario
@@ -196,7 +202,7 @@ else
 	xattr -dr com.apple.quarantine "$STAGE_DIR" 2>/dev/null || true
 fi
 
-echo "[4/4] Creating DMG disk image..."
+echo "[2/2] Creating DMG disk image..."
 DMG_PATH="$DIST_DIR/$DMG_NAME"
 rm -f "$DMG_PATH"
 # -layout SPUD: classic Apple Partition Map, not hdiutil's modern default

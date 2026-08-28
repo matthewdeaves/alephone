@@ -210,12 +210,12 @@ GLhandleARB parseShader(const GLcharARB* str, GLenum shaderType) {
 		return shader;
 	} else {
         GLint infoLen = 0;
-        glGetShaderiv((GLuint)(size_t)shader, GL_INFO_LOG_LENGTH, &infoLen);
-        
+        glGetObjectParameterivARB(shader, GL_OBJECT_INFO_LOG_LENGTH_ARB, &infoLen);
+
         if(infoLen > 1)
         {
             char* infoLog = (char*) malloc(sizeof(char) * infoLen);
-            glGetShaderInfoLog((GLuint)(size_t)shader, infoLen, NULL, infoLog);
+            glGetInfoLogARB(shader, infoLen, NULL, infoLog);
             logError("Error compiling shader:\n%s\n", infoLog);
             free(infoLog);
         }
@@ -302,19 +302,19 @@ void Shader::init() {
 	glLinkProgramARB(_programObj);
     
     GLint linked;
-    glGetProgramiv((GLuint)(size_t)_programObj, GL_LINK_STATUS, &linked);
+    glGetObjectParameterivARB(_programObj, GL_OBJECT_LINK_STATUS_ARB, &linked);
     if(!linked)
     {
       GLint infoLen = 0;
-      glGetProgramiv((GLuint)(size_t)_programObj, GL_INFO_LOG_LENGTH, &infoLen);
+      glGetObjectParameterivARB(_programObj, GL_OBJECT_INFO_LOG_LENGTH_ARB, &infoLen);
       if(infoLen > 1)
       {
         char* infoLog = (char*) malloc(sizeof(char) * infoLen);
-        glGetProgramInfoLog((GLuint)(size_t)_programObj, infoLen, NULL, infoLog);
+        glGetInfoLogARB(_programObj, infoLen, NULL, infoLog);
         logError("Error linking program:\n%s\n", infoLog);
         free(infoLog);
       }
-      glDeleteProgram((GLuint)(size_t)_programObj);
+      glDeleteObjectARB(_programObj);
     }
 
 	assert(_programObj);

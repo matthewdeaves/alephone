@@ -41,6 +41,14 @@ set -euo pipefail
 
 cd ~/alephone-build-ppc
 
+# rsync does not preserve autotools' dependency-order mtimes, so the
+# maintainer-mode rules in Makefile.in can decide configure.ac is newer than
+# aclocal.m4/configure/Makefile.in and try to regenerate them with tools this
+# build host doesn't have (e.g. aclocal-1.18). Force pre-generated-tree order.
+touch -t 202001010000 configure.ac acinclude.m4 $(find . -name '*.m4' -not -name aclocal.m4) $(find . -name Makefile.am)
+touch -t 202001020000 aclocal.m4
+touch -t 202001030000 configure config.h.in $(find . -name Makefile.in)
+
 DEPS=/Users/mini/alephone-ppc-deps
 TOOLCHAIN=/Users/mini/gcc14-ppc
 SDK=/Developer/SDKs/MacOSX10.3.9.sdk
@@ -61,13 +69,12 @@ export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig:$SDL_DIR/lib/pkgconfig"
 
 COMMON_CFLAGS="-O2 -mmacosx-version-min=10.3 -isysroot $SDK -include stddef.h"
 COMMON_CXXFLAGS="-O2 -std=c++17 -mmacosx-version-min=10.3 -isysroot $SDK -include stddef.h"
-COMMON_LDFLAGS="-mmacosx-version-min=10.3 -isysroot $SDK -L$DEPS/lib -L$SDL_DIR/lib -static-libstdc++ -static-libgcc -lobjc -framework Cocoa -framework CoreFoundation -framework ApplicationServices -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework Carbon -framework IOKit -Wl,-w"
+COMMON_LDFLAGS="-mmacosx-version-min=10.3 -isysroot $SDK -L$DEPS/lib -L$SDL_DIR/lib -static-libstdc++ -static-libgcc -lobjc -framework Cocoa -framework CoreFoundation -framework ApplicationServices -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework Carbon -framework IOKit -framework AGL -framework OpenGL -Wl,-w"
 COMMON_CPPFLAGS="-I$DEPS/include -I$SDL_DIR/include -I$SDL_DIR/include/SDL2 -I$DEPS/include/freetype2 -isysroot $SDK -include stddef.h"
 
 echo "[configure] configuring alephone for powerpc-apple-darwin8..."
 ./configure \
     --host=powerpc-apple-darwin8 \
-    --disable-opengl \
     --without-vpx --without-matroska --without-ebml --without-libyuv --without-nfd \
     --without-curl --without-zzip --without-miniupnpc --without-sdl_image --disable-steam --without-catch2 \
     --with-boost="$DEPS" \
@@ -115,6 +122,13 @@ set -euo pipefail
 
 cd ~/alephone-build-x86_64
 
+# See ppc branch above: force pre-generated-tree mtime order so maintainer-mode
+# rules don't try to regenerate aclocal.m4/configure/Makefile.in with tools
+# this build host doesn't have.
+touch -t 202001010000 configure.ac acinclude.m4 $(find . -name '*.m4' -not -name aclocal.m4) $(find . -name Makefile.am)
+touch -t 202001020000 aclocal.m4
+touch -t 202001030000 configure config.h.in $(find . -name Makefile.in)
+
 DEPS=/Users/mini/alephone-intel-deps
 TOOLCHAIN=/Users/mini/gcc14-ppc-build/tools/gcc-7.5.0-host
 SDL_DIR=/Users/mini/oldmac/sdl2-x86_64
@@ -139,7 +153,6 @@ COMMON_CPPFLAGS="-I$DEPS/include -I$SDL_DIR/include -I$SDL_DIR/include/SDL2 -I$D
 echo "[configure] configuring alephone for x86_64-apple-darwin..."
 ./configure \
     --host=x86_64-apple-darwin \
-    --disable-opengl \
     --without-vpx --without-matroska --without-ebml --without-libyuv --without-nfd \
     --without-curl --without-zzip --without-miniupnpc --without-sdl_image --disable-steam --without-catch2 \
     --with-boost="$DEPS" \

@@ -97,6 +97,31 @@ EOF
 
 	# Document icons
 	cp "$REPO_ROOT/Xcode/App_Resources/DataFileIcons/"*.icns "$APP_DIR/Contents/Resources/" 2>/dev/null || true
+
+	# Strip any quarantine attribute that hitched a ride on a source asset
+	# (icons, data files) before we sign — codesign rejects a quarantined tree.
+	# Canonical primitive (old-mac-build-host#34); falls back to inline xattr
+	# if this tree predates the sync.
+	if [ -x "$REPO_ROOT/scripts/clear-launch-quarantine.sh" ]; then
+		"$REPO_ROOT/scripts/clear-launch-quarantine.sh" "$APP_DIR"
+	else
+		xattr -dr com.apple.quarantine "$APP_DIR" 2>/dev/null || true
+	fi
+
+	# Ad-hoc sign so Gatekeeper's assessment on Catalina+ can succeed at all.
+	# Without any signature, a quarantined+unsigned app on modern macOS commonly
+	# shows "app is damaged and can't be opened, move to trash" (mistaken for
+	# corruption) instead of the milder "unidentified developer" prompt. Ad-hoc
+	# (-s -) needs no certificate; it does not survive Gatekeeper's online
+	# notarization check, but it fixes the false-corruption failure mode.
+	# lipo'd ppc/x86_64 fat binaries: codesign signs each slice independently,
+	# so this must run after the binary is final, not before lipo.
+	if codesign --force --deep -s - "$APP_DIR" 2>/tmp/codesign-${GAME_NAME// /_}.log; then
+		codesign --verify --verbose=2 "$APP_DIR" 2>&1 | sed 's/^/  [codesign] /'
+	else
+		echo "WARNING: ad-hoc codesign failed for $APP_DIR, see /tmp/codesign-${GAME_NAME// /_}.log" >&2
+		cat "/tmp/codesign-${GAME_NAME// /_}.log" >&2
+	fi
 }
 
 echo "[1/4] Creating Marathon.app..."
@@ -128,6 +153,14 @@ Universal Fat Binary spanning PowerPC (10.3.9 Panther / 10.4 Tiger / 10.5 Leopar
 Running the games:
   - Double-click Marathon.app, Marathon 2.app, or Marathon Infinity.app inside their respective folders.
 EOF
+
+# Defense in depth: strip quarantine from the whole staged tree (scenario
+# data was rsync'd from /tmp, which may itself have picked up the attribute).
+if [ -x "$REPO_ROOT/scripts/clear-launch-quarantine.sh" ]; then
+	"$REPO_ROOT/scripts/clear-launch-quarantine.sh" "$STAGE_DIR"
+else
+	xattr -dr com.apple.quarantine "$STAGE_DIR" 2>/dev/null || true
+fi
 
 echo "[4/4] Creating DMG disk image..."
 DMG_PATH="$DIST_DIR/$DMG_NAME"

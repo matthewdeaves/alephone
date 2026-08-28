@@ -193,8 +193,15 @@ AS_IF([test "x$enable_opengl" != "xno"],
                 [ SYS_GL_LIBS="-lGLEW -lopengl32 -lglu32"
                   LIBS="$LIBS -lstdc++" ],
                 [*-*-darwin*],
-                [ SYS_GL_LIBS="-F/System/Library/Frameworks -framework AGL -framework OpenGL"
-                  CPPFLAGS="$CPPFLAGS -D__DARWIN__ -F/System/Library/Frameworks -I/System/Library/Frameworks/OpenGL.framework/Headers" ],
+                [ dnl No explicit -F/-I here: an absolute /System/Library/Frameworks
+                  dnl path shadows the target SDK's own frameworks when cross-compiling
+                  dnl (e.g. -isysroot pointed at MacOSX10.3.9.sdk for the PPC slice) and
+                  dnl pulls in the *build host's* CoreFoundation/OpenGL headers instead,
+                  dnl which can require APIs the target SDK doesn't have (dispatch.h).
+                  dnl -isysroot (or the native default on a non-cross build) already
+                  dnl resolves system frameworks correctly without it.
+                  SYS_GL_LIBS="-framework AGL -framework OpenGL"
+                  CPPFLAGS="$CPPFLAGS -D__DARWIN__" ],
                 [*-*-linux*],
                 [ SYS_GL_LIBS="-lGL -lpthread" ],
                 [ SYS_GL_LIBS="-lGL" ])

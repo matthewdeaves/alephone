@@ -69,7 +69,23 @@ export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig:$SDL_DIR/lib/pkgconfig"
 
 COMMON_CFLAGS="-O2 -mmacosx-version-min=10.3 -isysroot $SDK -include stddef.h"
 COMMON_CXXFLAGS="-O2 -std=c++17 -mmacosx-version-min=10.3 -isysroot $SDK -include stddef.h"
-COMMON_LDFLAGS="-mmacosx-version-min=10.3 -isysroot $SDK -L$DEPS/lib -L$SDL_DIR/lib -static-libstdc++ -static-libgcc -lobjc -framework Cocoa -framework CoreFoundation -framework ApplicationServices -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework Carbon -framework IOKit -framework AGL -framework OpenGL -Wl,-w"
+# -Wl,-force_load,<libstdc++.a/libgcc.a>: alephone#11, 2026-08-28. -static-libstdc++
+# -static-libgcc alone were not enough -- measured on real Leopard/PPC hardware
+# (imac-g5): calls like std::basic_istream<char>::operator>>(short&) (an
+# out-of-line libstdc++ symbol, not header-inline template code) were still
+# resolving into the SYSTEM's /usr/lib/libstdc++.6.dylib instead of our
+# statically-linked copy -- confirmed via the live crash reporter's Binary
+# Images list, PC landed inside that dylib's mapped range. Root cause: Leopard's
+# own AudioToolbox/CoreAudio/OpenGL frameworks (all three, all required) each
+# transitively link libstdc++.6.dylib themselves, and this toolchain's linker
+# apparently satisfies some libstdc++ symbol references from that reachable
+# dynamic re-export rather than pulling them from the static archive, even
+# with -static-libstdc++ set. Two ABI-incompatible libstdc++s' RTTI/locale
+# facet objects meeting across that boundary is an indirect call through a
+# bad vtable pointer -- EXC_BAD_INSTRUCTION, exactly what got hit. -force_load
+# makes every object in the given archive part of THIS binary unconditionally,
+# so there is no longer an unresolved reference for the wrong dylib to satisfy.
+COMMON_LDFLAGS="-mmacosx-version-min=10.3 -isysroot $SDK -L$DEPS/lib -L$SDL_DIR/lib -static-libstdc++ -static-libgcc -Wl,-force_load,$TOOLCHAIN/powerpc-apple-darwin8/lib/libstdc++.a -Wl,-force_load,$TOOLCHAIN/lib/gcc/powerpc-apple-darwin8/14.2.0/libgcc.a -lobjc -framework Cocoa -framework CoreFoundation -framework ApplicationServices -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework Carbon -framework IOKit -framework AGL -framework OpenGL -Wl,-w"
 COMMON_CPPFLAGS="-I$DEPS/include -I$SDL_DIR/include -I$SDL_DIR/include/SDL2 -I$DEPS/include/freetype2 -isysroot $SDK -include stddef.h"
 
 echo "[configure] configuring alephone for powerpc-apple-darwin8..."

@@ -96,9 +96,16 @@ create_app_bundle() {
 EOF
 	fi
 
-	# Icon
+	# Icon. Copy under its OWN filename, not "${GAME_NAME}.icns" -- those
+	# coincided for Marathon1/2/3 (Marathon.icns, "Marathon 2.icns", ...)
+	# but not for AlephOne/AlephOne.icns (no space) once GAME_NAME became
+	# "Aleph One" (with one) for the single-bundle packaging (alephone#13):
+	# the file landed in the bundle as "Aleph One.icns" while Info.plist's
+	# CFBundleIconFile still said "AlephOne.icns" -- LaunchServices found
+	# nothing and showed the default blank icon. Measured 2026-08-28 on
+	# imac-2019, a real human looking at a real Finder icon, not a guess.
 	if [ -f "$ICON_SRC" ]; then
-		cp "$ICON_SRC" "$APP_DIR/Contents/Resources/${GAME_NAME}.icns"
+		cp "$ICON_SRC" "$APP_DIR/Contents/Resources/$(basename "$ICON_SRC")"
 	fi
 
 	# Document icons

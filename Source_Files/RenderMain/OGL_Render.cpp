@@ -1262,10 +1262,26 @@ static bool RenderAsRealWall(polygon_definition& RenderPolygon, bool IsVertical)
 	if (RenderPolygon.transfer_mode == _static_transfer)
 		TMgr.IsShadeless = 1;
 	TMgr.TextureType = OGL_Txtr_Wall;
-	
+
 	// Use that texture
-	if (!TMgr.Setup()) return false;
-			
+	// alephone#14 diagnostic (2026-08-28): GL_FLOAT did not fix the black
+	// in-game view on mini-g4 -- real gameplay confirmed running (audio,
+	// input), so this is narrowed to the render path itself. Logging once
+	// per process whether wall texture setup even succeeds, since a false
+	// return here means RenderAsRealWall draws nothing for that wall, no
+	// error, no crash -- exactly the "silently empty view" symptom.
+	{
+		static bool logged_once = false;
+		bool setup_ok = TMgr.Setup();
+		if (!logged_once)
+		{
+			logWarning("alephone#14 diag: RenderAsRealWall TMgr.Setup() = %s (TextureType=%d)",
+				setup_ok ? "true" : "FALSE", (int)OGL_Txtr_Wall);
+			logged_once = true;
+		}
+		if (!setup_ok) return false;
+	}
+
 	// The currently-used surface-coordinate object
 	SurfaceCoords* SCPtr;
 	
@@ -1637,7 +1653,23 @@ static bool RenderAsRealWall(polygon_definition& RenderPolygon, bool IsVertical)
 	glEnable(GL_TEXTURE_2D);
 
 	TMgr.SetupTextureMatrix();
-	TMgr.RenderNormal();	
+	TMgr.RenderNormal();
+	// alephone#14 diagnostic: confirm texture bind succeeded and the draw
+	// call itself is clean, once per process. TMgr.Setup() returning true
+	// only means A texture was found, not that RenderNormal()'s bind is
+	// valid on this GL implementation.
+	{
+		static bool logged_once2 = false;
+		if (!logged_once2)
+		{
+			GLenum err = glGetError();
+			GLint bound = 0;
+			glGetIntegerv(GL_TEXTURE_BINDING_2D, &bound);
+			logWarning("alephone#14 diag: after RenderNormal() glGetError=0x%x bound_texture=%d NumVertices=%d TransferMode=%d",
+				(unsigned)err, (int)bound, (int)NumVertices, (int)TMgr.TransferMode);
+			logged_once2 = true;
+		}
+	}
 	if (TMgr.TransferMode == _static_transfer)
 	{
 		SetupStaticMode(IsBlended ? TMgr.TransferData : 0);
@@ -1825,6 +1857,17 @@ static bool RenderAsRealWall(polygon_definition& RenderPolygon, bool IsVertical)
 	SetBlend(OGL_BlendType_Crossfade);
 	glEnable(GL_DEPTH_TEST);
 	TMgr.RestoreTextureMatrix();
+
+	// alephone#14 diagnostic: error state after everything this function
+	// did, draw calls included -- once per process.
+	{
+		static bool logged_once3 = false;
+		if (!logged_once3)
+		{
+			logWarning("alephone#14 diag: end of RenderAsRealWall glGetError=0x%x", (unsigned)glGetError());
+			logged_once3 = true;
+		}
+	}
 
 	return true;
 }

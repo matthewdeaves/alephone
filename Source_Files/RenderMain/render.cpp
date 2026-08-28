@@ -239,6 +239,7 @@ extern WindowPtr screen_window;
 #include "RenderRasterize_Shader.h"
 #include "Rasterizer_Shader.h"
 #endif
+#include "Logging.h" // alephone#14 diagnostic logging
 #include "preferences.h"
 #include "screen.h"
 
@@ -471,6 +472,24 @@ void render_view(
 			// software -- OGL_UseClassicRenderer() is screen.cpp's runtime
 			// capability check (real GL context confirmed, shader extensions
 			// confirmed absent), same signal RenPtr below uses.
+			// alephone#14 diagnostic: RenderAsRealWall's own logging never
+			// fired despite a confirmed in-game black view -- narrowing
+			// whether this selection itself is reaching Rasterizer_OGL at
+			// all once real gameplay starts (menu rendering does not
+			// exercise this code path, so it proved nothing either way).
+			{
+				static bool logged_rasptr_choice = false;
+				static bool last_choice_classic = false;
+				bool want_classic = OGL_IsActive() && OGL_UseClassicRenderer();
+				if (!logged_rasptr_choice || want_classic != last_choice_classic)
+				{
+					logWarning("alephone#14 diag: RasPtr selection: OGL_IsActive=%d OGL_UseClassicRenderer=%d -> %s",
+						(int)OGL_IsActive(), (int)OGL_UseClassicRenderer(),
+						want_classic ? "Rasterizer_OGL" : (OGL_IsActive() ? "Rasterizer_Shader" : "Rasterizer_SW"));
+					logged_rasptr_choice = true;
+					last_choice_classic = want_classic;
+				}
+			}
 			if (OGL_IsActive() && OGL_UseClassicRenderer())
 				RasPtr = &Rasterizer_OGL;
 			else if (OGL_IsActive())

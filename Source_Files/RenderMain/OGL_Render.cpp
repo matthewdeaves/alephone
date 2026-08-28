@@ -554,7 +554,28 @@ bool OGL_StartRun()
 	if (!OGL_CheckExtension("GL_EXT_framebuffer_object"))
 	{
 		logWarning("Framebuffer Objects not available");
-		return false;
+		// alephone#14, alephone#12: this was `return false;`, aborting the
+		// entire function before OGL_StartTextures() (further down) ever
+		// ran -- meaning TextureStateSets stayed all-NULL and every single
+		// TextureManager::Setup() call failed silently for the rest of the
+		// process (CBTSList == NULL), which is exactly the "world renders
+		// solid black, HUD partially fails too" symptom on FBO-less
+		// hardware (measured: ATI Radeon 9200/RV280, mini-g4).
+		//
+		// git history explains why: the ORIGINAL 2015 version of this
+		// check (fe11f93e) did not hard-fail here at all -- on missing FBO
+		// it just disabled the shader renderer and fell back to classic.
+		// commit ae299aec (2018, "Deactivate Classic renderer", same
+		// author) replaced that fallback with the hard return false once
+		// upstream had given up on the classic OpenGL path ever being
+		// reachable again -- reasonable at the time, since nothing called
+		// it for real GL rendering by then. Now that alephone#12 wires
+		// Rasterizer_OGL/Render_Classic back up for GPUs without GLSL,
+		// that assumption no longer holds. FBO is only ever used for
+		// bloom/glow (Rasterizer_Shader's FBOSwapper); the code right
+		// below this block already disables bloom gracefully when
+		// FBO_Allowed is false. Restoring that behavior, not reinventing
+		// it -- just letting startup continue instead of aborting.
 	}
 	else
 	{

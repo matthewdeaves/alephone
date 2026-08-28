@@ -1199,8 +1199,21 @@ void FindShadingColor(GLdouble Depth, _fixed Shading, GLfloat *Color)
 // Storage of intermediate results for mass render with glDrawArrays
 struct ExtendedVertexData
 {
-	GLdouble Vertex[4];
-	GLdouble TexCoord[2];
+	// alephone#14: was GLdouble. This classic (fixed-function) path sat
+	// dormant, unexercised, from 2009 (commit c37232bc, shader renderer
+	// became the only wired-up path) until it was reconnected today
+	// (c7024dcc). On real hardware (mini-g4, ATI Radeon 9200) the result
+	// was a black in-game view with the HUD and 2D splash screen (a
+	// different render path) both rendering fine -- narrowing it to
+	// world-geometry vertex submission specifically. GL_DOUBLE vertex
+	// arrays (glVertexPointer/glTexCoordPointer below) have historically
+	// had weak-to-nonexistent driver support on old ATI hardware; GLfloat
+	// is what every other vertex path in this file already uses
+	// (AltExtendedVertexData, sprites' fallback path). No precision need
+	// here that float doesn't already cover -- world coordinates are
+	// fixed-point integers scaled into these, not natively double-precision.
+	GLfloat Vertex[4];
+	GLfloat TexCoord[2];
 	GLfloat Color[3];
 	GLfloat GlowColor[3];
 };
@@ -1617,8 +1630,8 @@ static bool RenderAsRealWall(polygon_definition& RenderPolygon, bool IsVertical)
 	SetProjectionType(Projection_OpenGL_Eye);
 	
 	// Location of data:
-	glVertexPointer(4,GL_DOUBLE,sizeof(ExtendedVertexData),ExtendedVertexList[0].Vertex);
-	glTexCoordPointer(2,GL_DOUBLE,sizeof(ExtendedVertexData),ExtendedVertexList[0].TexCoord);
+	glVertexPointer(4,GL_FLOAT,sizeof(ExtendedVertexData),ExtendedVertexList[0].Vertex);
+	glTexCoordPointer(2,GL_FLOAT,sizeof(ExtendedVertexData),ExtendedVertexList[0].TexCoord);
 	
 	// Painting a texture...
 	glEnable(GL_TEXTURE_2D);
@@ -1975,8 +1988,8 @@ static bool RenderAsLandscape(polygon_definition& RenderPolygon)
 	SetProjectionType(Projection_Screen);
 	
 	// Location of data:
-	glVertexPointer(3,GL_DOUBLE,sizeof(ExtendedVertexData),ExtendedVertexList[0].Vertex);
-	glTexCoordPointer(2,GL_DOUBLE,sizeof(ExtendedVertexData),ExtendedVertexList[0].TexCoord);
+	glVertexPointer(3,GL_FLOAT,sizeof(ExtendedVertexData),ExtendedVertexList[0].Vertex);
+	glTexCoordPointer(2,GL_FLOAT,sizeof(ExtendedVertexData),ExtendedVertexList[0].TexCoord);
 	
 	// Painting a texture...
 	glEnable(GL_TEXTURE_2D);
@@ -2183,8 +2196,8 @@ bool OGL_RenderSprite(rectangle_definition& RenderRectangle)
 	glColor4fv(Color);
 	
 	// Location of data:
-	glVertexPointer(3,GL_DOUBLE,sizeof(ExtendedVertexData),ExtendedVertexList[0].Vertex);
-	glTexCoordPointer(2,GL_DOUBLE,sizeof(ExtendedVertexData),ExtendedVertexList[0].TexCoord);
+	glVertexPointer(3,GL_FLOAT,sizeof(ExtendedVertexData),ExtendedVertexList[0].Vertex);
+	glTexCoordPointer(2,GL_FLOAT,sizeof(ExtendedVertexData),ExtendedVertexList[0].TexCoord);
 	glEnable(GL_TEXTURE_2D);
 		
 	// Go!

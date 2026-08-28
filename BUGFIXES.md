@@ -3,6 +3,92 @@
 One short entry per real bug fixed in this fork: what it was, what the fix was.
 Newest first.
 
+- **PPC/Leopard: two separate 100%-reproducible SIGILL crashes on every
+  launch** (alephone#11), found chasing "human double-click launch
+  unreliable" (alephone#5) onto real `imac-g5` (10.5.8) hardware. Both
+  confirmed via the live macOS crash reporter's own Binary Images list
+  (authoritative — not offline symbolication against a possibly-mismatched
+  slice), both reproduced independently by an automated test and by the
+  user's own manual Finder launch (identical crash address both times), both
+  verified fixed by a 15s+ direct run on the real machine afterward.
+  1. `boost::property_tree::iptree`'s default comparator (`less_nocase`)
+     calls `std::toupper(ch, locale)` — a virtual dispatch through a
+     `std::locale` facet. This PPC/GCC14 cross-toolchain miscompiles that
+     indirect call: the crashed thread's `ctr` register (PPC's indirect-call
+     target) pointed into `__cxxabiv1::__class_type_info` RTTI data instead
+     of real code. Every MML/XML config file load goes through this
+     (`InfoTree : iptree`), so every game hit it on Leopard. Fixed with a
+     locale-free ASCII `toupper()` in the header-only comparator
+     (`scripts/patches/boost-1.76.0-less_nocase-no-locale.patch`, applied by
+     both `build-deps-ppc.sh` and `build-deps-intel.sh` right after boost's
+     headers are staged, so it survives a from-scratch dependency rebuild).
+  2. A second, related crash immediately followed the first fix:
+     `std::basic_istream<char>::operator>>(short&)` (via
+     `boost::property_tree`'s `stream_translator`, used for every typed XML
+     attribute) — same virtual-dispatch-into-garbage signature. Root cause,
+     confirmed by checking which loaded image the crash PC actually fell in:
+     Leopard's own `AudioToolbox`/`CoreAudio`/`OpenGL` frameworks (all three
+     required, no way around linking them) each transitively link the
+     *system* `/usr/lib/libstdc++.6.dylib` (verified with `otool -L` against
+     each framework on real hardware). Despite `-static-libstdc++
+     -static-libgcc`, some libstdc++ symbol references were still resolving
+     into that reachable dynamic copy instead of our static archive — two
+     ABI-incompatible C++ runtimes' RTTI/locale objects crossing that
+     boundary. Fixed with `-Wl,-force_load` on the toolchain's own
+     `libstdc++.a`/`libgcc.a`, so every symbol in both becomes part of the
+     binary unconditionally and there's no unresolved reference left for the
+     system dylib to satisfy.
+  **Not fully resolved**: after both fixes, direct launch on `imac-g5` now
+  survives past both crash points but shows repeated `malloc: *** error ...
+  Non-aligned pointer being freed` warnings. Same symptom class this ticket
+  was originally opened for (Marathon Infinity malloc corruption on
+  mini-g4/quicksilver's software-renderer path), now also seen on Marathon 1
+  on PPC/Leopard. Didn't crash the process in a 15s test window, but this is
+  real memory corruption, not resolved — separate investigation needed,
+  likely a genuine PPC struct-alignment/big-endian bug given the pattern.
+
+- **x86_64 slice: `dyld: Library not loaded` on every machine that isn't the
+  build host** (alephone#5), found on `imac-2019` (Sequoia) — the actual P0
+  launch target, not a synthetic test. The x86_64 slice dynamically links
+  `libSDL2-2.0.0.dylib` via a bare build-host-absolute path
+  (`/Users/mini/oldmac/sdl2-x86_64/lib/...`) — every other dependency
+  (`SDL2_ttf`, boost, asio, `libsndfile`, `openal-soft`) statically links; only
+  SDL2 itself is a pre-existing shared-lib tree referenced by
+  `--with-sdl-prefix`. Worked by pure coincidence on any machine that
+  happened to share that exact directory layout (e.g. the build host itself),
+  crashed at launch everywhere else. Fixed: `build.sh` fetches the actual
+  `.dylib` alongside the compiled x86_64 binary and retargets its load
+  command to `@executable_path` on the **thin** slice, before `lipo` — Apple's
+  current `install_name_tool` cannot parse this PPC cross-compiled slice's
+  load commands at all (`malformed load command 0 (cmdsize is zero)`) and
+  aborts on the whole fat binary once ppc is lipo'd in, so the retarget has
+  to happen before that point, not after in `package-dmg.sh`.
+  `package-dmg.sh` bundles the retargeted `.dylib` into each app's
+  `Contents/Frameworks/`, matching the same self-contained shape quakespasm
+  ships `SDL.framework` in.
+
+- **`package-dmg.sh`'s version-string collision between client and server
+  tags** (alephone#9). `git describe --tags --always --dirty` picks the
+  nearest tag by commit ancestry regardless of namespace — once
+  `server-v1.0.0` (alephone#9) landed on the same commit as a client DMG
+  build, a bare `git describe` named the *client* DMG
+  `Marathon-OldMac-server-v1.0.0.dmg`. Fixed by restricting each script's
+  `git describe --match` pattern to its own tag namespace
+  (`release-*`/`v[0-9]*` for the client, `server-v*` for the server).
+
+- **First server-v1.0.0 release shipped with no systemd unit and a fabricated
+  CLI usage doc** (alephone#9) — caught by `retro-server-infra` before
+  deploying, not after. `README.txt`'s `-p/-n/-m/-g` flags never existed;
+  real usage (measured from `standalone_hub_main.cpp`) is one positional
+  port number, nothing else. Added a real `systemd/alephone-server.service`
+  to the tarball, deliberately **without** the console-FIFO-on-fd-3 pattern
+  the other four ports' units use: `standalone_hub`'s main loop never reads
+  stdin at all (measured, full read of the source) — wiring a FIFO anyway
+  would silently discard everything written to it, exactly the false-success
+  packaging pattern infra's deploy tooling exists to catch. Also not
+  self-hosting: a real Aleph One client must still complete a GUI-only
+  "gatherer" handshake before any match starts; nothing scripts that today.
+
 - **DMGs built by `package-dmg.sh` could not be mounted at all on real 10.3.9
   Panther hardware** (`hdiutil: attach failed - no mountable file systems`)
   (alephone#5, alephone#7). `hdiutil create` with no explicit `-layout`

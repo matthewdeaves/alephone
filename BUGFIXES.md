@@ -195,3 +195,28 @@ Newest first.
   `TARGET_DARWIN` automake conditional in `configure.ac` adds them to
   `libcseries_a_SOURCES` on `*-darwin*`. Matters here because the PPC cross
   build goes through autotools, not Xcode.
+
+- **`-Wl,-exported_symbols_list` (alephone#11's Leopard libstdc++-collision
+  fix, `4ab82a53`) fixed real Leopard hardware but broke real Tiger hardware
+  100% of the time — reverted same day.** Verified the fix itself first, on
+  the actual engine binary (not the earlier synthetic repro): real imac-g5
+  run, `DYLD_PRINT_BINDINGS`, 188 cross-image `libstdc++.6.dylib` binds down
+  to 0, reached hardware OpenGL init, no crash-reporter entry. Then ran the
+  identical binary on real mini-g4 (Tiger 10.4.11) as part of the same
+  verification pass, since the fat binary's one ppc slice has to run on both
+  — 100% reproducible `EXC_BAD_ACCESS`/`KERN_PROTECTION_FAILURE` at process
+  *startup*, before any application code runs (crash trace:
+  `_malloc_initialize` <- `calloc` <- `dwarf2_unwind_dyld_add_image_hook` <-
+  dyld's `imageNotification`/`registerAddCallback` <-
+  `__keymgr_dwarf2_register_sections` <- `_start`). Confirmed a real
+  regression, not pre-existing: the identical binary minus this one flag ran
+  2+ minutes on the same mini-g4 hardware without it (still shows the
+  original malloc-corruption warnings this ticket opened with, but doesn't
+  hard-crash at launch). Tiger's dyld (46.16, much older than Leopard's)
+  apparently needs something in the exported-symbol table that restricting
+  it to just `_main` strips, for its DWARF-unwind image-registration
+  handshake. Reverted the flag; `scripts/ppc-exported-symbols.txt` is left
+  in the tree, just unreferenced, for a follow-up that finds a narrower
+  export list safe on both OS versions. Leopard is back to the
+  already-documented (not new) locale/libstdc++ collision this ticket is
+  still open for.

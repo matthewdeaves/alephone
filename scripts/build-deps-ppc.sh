@@ -36,7 +36,20 @@ SRC=~/alephone-deps-src
 BUILD=~/alephone-deps-build
 PREFIX=~/alephone-ppc-deps
 TOOLCHAIN=/Users/mini/gcc14-ppc
-SDK=/Developer/SDKs/MacOSX10.3.9.sdk
+# Host-conditional SDK path (old-mac-build-host#47): imac-2019 runs a sealed
+# system volume (csrutil enabled) -- /Developer can never exist there, real
+# SDKs live at ~/SDKs instead. Detect by existence, not hostname, so this
+# runs correctly inside the quoted heredoc without plumbing $BUILD_HOST
+# through ssh (same idiom old-mac-quakespasm's build.sh uses, just keyed off
+# the filesystem instead of a passed-in host name).
+if [ -d /Developer/SDKs/MacOSX10.3.9.sdk ]; then
+	SDK=/Developer/SDKs/MacOSX10.3.9.sdk
+elif [ -d ~/SDKs/MacOSX10.3.9.sdk ]; then
+	SDK=~/SDKs/MacOSX10.3.9.sdk
+else
+	echo "build-deps-ppc.sh: no MacOSX10.3.9 SDK found (checked /Developer/SDKs and ~/SDKs)" >&2
+	exit 1
+fi
 JOBS=2
 
 SDL_PREFIX=/Users/mini/oldmac/sdl2-ppc-tiger103

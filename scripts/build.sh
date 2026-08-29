@@ -51,7 +51,19 @@ touch -t 202001030000 configure config.h.in $(find . -name Makefile.in)
 
 DEPS=/Users/mini/alephone-ppc-deps
 TOOLCHAIN=/Users/mini/gcc14-ppc
-SDK=/Developer/SDKs/MacOSX10.3.9.sdk
+# Host-conditional SDK path (old-mac-build-host#47): imac-2019 runs a sealed
+# system volume (csrutil enabled) -- /Developer can never exist there, real
+# SDKs live at ~/SDKs instead. Detect by existence, not hostname, so this
+# runs correctly inside the quoted heredoc without plumbing $BUILD_HOST
+# through ssh.
+if [ -d /Developer/SDKs/MacOSX10.3.9.sdk ]; then
+	SDK=/Developer/SDKs/MacOSX10.3.9.sdk
+elif [ -d ~/SDKs/MacOSX10.3.9.sdk ]; then
+	SDK=~/SDKs/MacOSX10.3.9.sdk
+else
+	echo "build.sh: no MacOSX10.3.9 SDK found (checked /Developer/SDKs and ~/SDKs)" >&2
+	exit 1
+fi
 SDL_DIR=/Users/mini/oldmac/sdl2-ppc-tiger103
 [ -d "$SDL_DIR" ] || SDL_DIR=/Users/mini/oldmac/sdl2-ppc-panther
 

@@ -756,11 +756,31 @@ void RenderRasterize_Shader::render_node_floor_or_ceiling(clipping_window_data *
 		glVertexPointer(3, GL_FLOAT, 0, vertex_array);
 		glTexCoordPointer(2, GL_FLOAT, 0, texcoord_array);
 
-		glDrawArrays(GL_POLYGON, 0, vertex_count);
+		// GL_POLYGON, not GL_QUADS/GL_TRIANGLE_FAN: alephone#16, 2026-08-29,
+		// measured on real ATI R300-family hardware (imac-g5/Radeon 9600,
+		// g5-desktop/Radeon 9650, both real fps reports). `sample`-profiled
+		// during real gameplay: this exact call, for floor/ceiling polygons
+		// specifically (arbitrary N-gon, not the fixed-4 GL_QUADS walls use
+		// just below in render_node_side), was 28% of ALL sampled time,
+		// almost entirely inside Apple's OpenGL software-fallback plugin
+		// path (gleFallbackBegin -> gleSynchronizePluginTextureLevels ->
+		// IOConnectCallMethod -> mach_msg_trap -- a kernel round-trip per
+		// draw call). Walls, right next to this in the same frame, go
+		// through the normal hardware path with no fallback at all.
+		// GL_TRIANGLE_FAN is the correct, semantically-identical
+		// replacement for GL_POLYGON here: Marathon's floor/ceiling
+		// polygons are convex sectors (GL_POLYGON already assumed that --
+		// it renders correctly only for convex, planar polygons, the exact
+		// same constraint GL_TRIANGLE_FAN has), fanned from the same first
+		// vertex, same winding order, same vertex/texcoord arrays -- no
+		// data restructuring, just the primitive enum. Not yet verified on
+		// real hardware; see the issue for the before/after `sample` trace
+		// once it is.
+		glDrawArrays(GL_TRIANGLE_FAN, 0, vertex_count);
 
 		// see note 2 above; pulsate uniform should stay set from setupWall call
 		if (setupGlow(view, TMgr, 0, intensity, weaponFlare, selfLuminosity, offset, renderStep)) {
-			glDrawArrays(GL_POLYGON, 0, vertex_count);
+			glDrawArrays(GL_TRIANGLE_FAN, 0, vertex_count);
 		}
 
 		Shader::disable();
@@ -1428,8 +1448,12 @@ void RenderRasterize_Shader::render_viewer_sprite(rectangle_definition& RenderRe
 	glTexCoordPointer(2,GL_DOUBLE,sizeof(ExtendedVertexData),ExtendedVertexList[0].TexCoord);
 	glEnable(GL_TEXTURE_2D);
 		
-	// Go!
-        glDrawArrays(GL_POLYGON,0,4);
+	// Go! GL_QUADS, not GL_POLYGON: alephone#16, 2026-08-29. Fixed 4-vertex
+	// draw -- its own glow-pass call three lines below already uses
+	// GL_QUADS for these same vertices; matching it here for the same
+	// reason as render_node_floor_or_ceiling's fix just above (GL_POLYGON
+	// measured hitting a software-fallback path on ATI R300-family GPUs).
+        glDrawArrays(GL_QUADS,0,4);
 
         if (setupGlow(view, TMgr, 0, 1, weaponFlare, selfLuminosity, 0, renderStep)) {
             glDrawArrays(GL_QUADS, 0, 4);

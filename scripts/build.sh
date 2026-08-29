@@ -101,7 +101,22 @@ COMMON_CXXFLAGS="-O2 -std=c++17 -mmacosx-version-min=10.3 -isysroot $SDK -includ
 # bad vtable pointer -- EXC_BAD_INSTRUCTION, exactly what got hit. -force_load
 # makes every object in the given archive part of THIS binary unconditionally,
 # so there is no longer an unresolved reference for the wrong dylib to satisfy.
-COMMON_LDFLAGS="-mmacosx-version-min=10.3 -isysroot $SDK -L$DEPS/lib -L$SDL_DIR/lib -static-libstdc++ -static-libgcc -Wl,-force_load,$TOOLCHAIN/powerpc-apple-darwin8/lib/libstdc++.a -Wl,-force_load,$TOOLCHAIN/lib/gcc/powerpc-apple-darwin8/14.2.0/libgcc.a -lobjc -framework Cocoa -framework CoreFoundation -framework ApplicationServices -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework Carbon -framework IOKit -framework AGL -framework OpenGL -Wl,-w"
+# -Wl,-exported_symbols_list,<_main-only file>: alephone#11, 2026-08-29,
+# old-mac-build-host. -force_load above stops the WRONG symbols winning, but
+# still leaves every one of ours marked "weak external" in the Mach header --
+# dyld's weak-symbol coalescing then rebinds Leopard's OWN system
+# libstdc++.6.dylib's internal std::locale::_Impl calls into this binary's
+# copy at load time (188 cross-image binds measured via DYLD_PRINT_BINDINGS
+# on real imac-g5). Two ABI-incompatible libstdc++ locale/RTTI objects
+# meeting through that path is the same indirect-call-into-garbage crash
+# class as the -force_load fix above, just via dyld's runtime binding instead
+# of the static linker. Restricting the executable's exported symbol table to
+# just _main removes WEAK_DEFINES/BINDS_TO_WEAK from the Mach header entirely
+# -- verified fix, not a guess: same real-hardware trace went from 188
+# cross-image binds to zero. Safe here specifically because nothing in this
+# tree calls dlopen/dlsym (checked) -- a plugin architecture binding back
+# into the main executable's exports would need this revisited.
+COMMON_LDFLAGS="-mmacosx-version-min=10.3 -isysroot $SDK -L$DEPS/lib -L$SDL_DIR/lib -static-libstdc++ -static-libgcc -Wl,-force_load,$TOOLCHAIN/powerpc-apple-darwin8/lib/libstdc++.a -Wl,-force_load,$TOOLCHAIN/lib/gcc/powerpc-apple-darwin8/14.2.0/libgcc.a -Wl,-exported_symbols_list,$(pwd)/scripts/ppc-exported-symbols.txt -lobjc -framework Cocoa -framework CoreFoundation -framework ApplicationServices -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework Carbon -framework IOKit -framework AGL -framework OpenGL -Wl,-w"
 COMMON_CPPFLAGS="-I$DEPS/include -I$SDL_DIR/include -I$SDL_DIR/include/SDL2 -I$DEPS/include/freetype2 -isysroot $SDK -include stddef.h"
 
 echo "[configure] configuring alephone for powerpc-apple-darwin8..."

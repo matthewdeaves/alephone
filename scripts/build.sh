@@ -34,6 +34,10 @@ case "$TARGET" in
 		ssh "$BUILD_HOST" 'mkdir -p ~/alephone-build-ppc'
 		rsync -az --delete $(source_stamp_rsync_excludes "$SOURCE_STAMP_EXCLUDES") \
 			"$REPO_ROOT/" "$BUILD_HOST:~/alephone-build-ppc/"
+		# Stamp what was actually rsynced (source_stamp_compute matches the
+		# same exclude list the rsync above used), so `fat` below can tell
+		# a fresh slice from a stale one instead of always rebuilding.
+		_stamp_ppc="$(source_stamp_compute "$REPO_ROOT" "$SOURCE_STAMP_EXCLUDES")"
 
 		echo "[build] compiling Aleph One PPC slice on $BUILD_HOST..."
 		ssh "$BUILD_HOST" 'bash -s' << 'REMOTE_BUILD'
@@ -136,6 +140,8 @@ REMOTE_BUILD
 		rsync -az "$BUILD_HOST:~/alephone-build-ppc/Source_Files/alephone" "$REPO_ROOT/build/alephone-ppc"
 		echo "[build] fetched build/alephone-ppc"
 		otool -hv "$REPO_ROOT/build/alephone-ppc"
+		mkdir -p "$REPO_ROOT/build/stamp-ppc"
+		source_stamp_write "$REPO_ROOT/build/stamp-ppc" "$_stamp_ppc"
 		;;
 
 	x86_64)
@@ -143,6 +149,8 @@ REMOTE_BUILD
 		ssh "$BUILD_HOST" 'mkdir -p ~/alephone-build-x86_64'
 		rsync -az --delete $(source_stamp_rsync_excludes "$SOURCE_STAMP_EXCLUDES") \
 			"$REPO_ROOT/" "$BUILD_HOST:~/alephone-build-x86_64/"
+		# See ppc branch above: stamp what was actually rsynced.
+		_stamp_x86_64="$(source_stamp_compute "$REPO_ROOT" "$SOURCE_STAMP_EXCLUDES")"
 
 		echo "[build] compiling Aleph One x86_64 slice on $BUILD_HOST..."
 		ssh "$BUILD_HOST" 'bash -s' << 'REMOTE_BUILD'
@@ -242,11 +250,30 @@ REMOTE_BUILD
 			@executable_path/../Frameworks/libSDL2-2.0.0.dylib \
 			"$REPO_ROOT/build/alephone-x86_64"
 		echo "[build] retargeted libSDL2 load command to @executable_path"
+		mkdir -p "$REPO_ROOT/build/stamp-x86_64"
+		source_stamp_write "$REPO_ROOT/build/stamp-x86_64" "$_stamp_x86_64"
 		;;
 
 	fat)
-		"$0" ppc
-		"$0" x86_64
+		# Only rebuild a slice if its recorded source stamp doesn't match the
+		# current tree -- content hash (source_stamp.sh), not mtime, matching
+		# the same freshness check the rest of the fleet uses; see that
+		# file's header for why mtime/existence checks were rejected. Without
+		# this, `fat` unconditionally rebuilds both slices from scratch every
+		# time even when they were just built moments ago (measured
+		# 2026-08-29: ~26min wasted re-running ppc+x86_64 that were already
+		# current).
+		_stamp_now="$(source_stamp_compute "$REPO_ROOT" "$SOURCE_STAMP_EXCLUDES")"
+		if [ -f "$REPO_ROOT/build/alephone-ppc" ] && source_stamp_verify "$REPO_ROOT/build/stamp-ppc" "$_stamp_now"; then
+			echo "[fat] ppc slice already current (source stamp match), skipping rebuild"
+		else
+			"$0" ppc
+		fi
+		if [ -f "$REPO_ROOT/build/alephone-x86_64" ] && source_stamp_verify "$REPO_ROOT/build/stamp-x86_64" "$_stamp_now"; then
+			echo "[fat] x86_64 slice already current (source stamp match), skipping rebuild"
+		else
+			"$0" x86_64
+		fi
 		echo "[fat] creating Universal fat binary..."
 		lipo -create -output "$REPO_ROOT/build/alephone" \
 			"$REPO_ROOT/build/alephone-ppc" \

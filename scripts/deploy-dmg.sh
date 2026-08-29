@@ -113,7 +113,15 @@ rm -f "$DEPLOYED_LIST"
 # path form if the lookup comes up empty, and don't let either failure abort
 # the deploy -- a DMG that won't detach is recoverable by hand later, unlike
 # apps that never got quarantine-cleared.
-DEV="$(mount | awk -v m="$MOUNT" '$0 ~ (" on " m " ") {print $1}')"
+#
+# Match on the mountpoint's basename, not the full $MOUNT path: mount(8)
+# reports the resolved path (/private/tmp/... on Panther/Tiger, where /tmp
+# is a symlink), which never equals $MOUNT's unresolved /tmp/... form --
+# measured 2026-08-29, an exact-path match here silently found nothing and
+# fell through to the still-broken path-form detach. The mount point name
+# is PID-suffixed (see MOUNT="$2" above) so basename alone stays unique.
+mount_base="$(basename "$MOUNT")"
+DEV="$(mount | awk -v b="$mount_base" '$0 ~ ("/" b " ") {print $1}')"
 if [ -n "$DEV" ]; then
 	hdiutil detach "$DEV" -quiet || echo "deploy-dmg.sh: detach by device ($DEV) failed, DMG left mounted at $MOUNT" >&2
 else

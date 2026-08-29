@@ -241,6 +241,7 @@ extern WindowPtr screen_window;
 #endif
 #include "preferences.h"
 #include "screen.h"
+#include "Logging.h"
 
 /* use native alignment */
 #if defined (powerc) || defined (__powerc)
@@ -484,6 +485,24 @@ void render_view(
 #ifdef HAVE_OPENGL
 			}
 #endif
+			// Permanent, once-per-process: which renderer actually got
+			// picked. Cheap (one log line, gated by a static bool) and real
+			// diagnostic value across the fleet's mixed GPU classes -- this
+			// is exactly the kind of thing "measure which renderer is
+			// active" (alephone#6/#14) needed a rebuild cycle to answer
+			// before. Not per-frame, so it costs nothing at runtime.
+			{
+				static bool logged_renderer_choice = false;
+				if (!logged_renderer_choice)
+				{
+					const char* renderer_name =
+						(RasPtr == &Rasterizer_OGL) ? "OpenGL classic (fixed-function)" :
+						(RasPtr == &Rasterizer_Shader) ? "OpenGL shader (GLSL)" :
+						"software";
+					logNote("active renderer: %s", renderer_name);
+					logged_renderer_choice = true;
+				}
+			}
 
 			// Set its view:
 			RasPtr->SetView(*view);

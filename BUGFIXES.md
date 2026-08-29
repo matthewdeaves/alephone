@@ -220,3 +220,38 @@ Newest first.
   export list safe on both OS versions. Leopard is back to the
   already-documented (not new) locale/libstdc++ collision this ticket is
   still open for.
+
+- **Follow-up, same day: `-Wl,-unexported_symbols_list` deny-list replaces
+  the failed allow-list, real-hardware tested on both OSes — real
+  improvement, not a fully closed loop.** Buildhost's hypothesis: an
+  ALLOW-list (only `_main` exported) hid too much, including whatever
+  libgcc.a/runtime-support symbol Tiger's dyld needs for its DWARF-unwind
+  registration handshake; a DENY-list naming only libstdc++.a/`__gnu_cxx`/
+  `__cxxabiv1` symbols (`scripts/ppc-libstdcxx-unexport-list.txt`, generated
+  from our own baseline ppc binary via `nm -m`, ~11.2k symbols) should hide
+  the real collision surface without touching libgcc.a. Rebuilt and verified
+  on real hardware, not the synthetic repro this time: **imac-g5** (Leopard)
+  — 0 of the original-direction `libstdc++.6.dylib:...$lazy_ptr = Aleph
+  One:...` binds (down from 188), 45s soak with continuous forward progress
+  (real GL shader-compilation activity — `libGLProgrammability.dylib`,
+  `glvm*` — not a stuck/spinning process), zero malloc-corruption warnings,
+  no new crash-reporter entry. **mini-g4** (Tiger) — two separate runs
+  (18s, 45s), no crash, no crash-reporter entry at all (vs. instant SIGBUS
+  with the allow-list attempt).
+  **Real caveat found that the synthetic repro didn't surface**: the
+  deny-list also causes a NEW, opposite-direction cross-image bind class —
+  our own code's weak references to symbols we just unexported (stream
+  destructors `~istream`/`~ostream`/`~iostream`, `std::string::_Rep`
+  sentinel statics, locale facet `id`s for `moneypunct`/`collate`/
+  `num_get`/`num_put`/`time_get`/`time_put`/`messages`, `__gnu_cxx` concept-
+  check no-ops) now resolve into the SYSTEM's `libstdc++.6.dylib` instead of
+  our statically-linked copy — the same ABI-mismatch risk class this whole
+  investigation started from, just reversed. ~200 such binds measured on
+  imac-g5 in the 45s trace. Did not manifest as a crash or corruption in
+  testing performed (including exercising the original crash site —
+  `ScenarioChooser::add_directory`'s ifstream construct/destruct, which
+  happens early in this same run), but this is real residual risk, not a
+  clean zero, and wasn't caught by buildhost's minimal synthetic test
+  because it didn't exercise real iostream/string/locale-facet code the way
+  the actual engine does. Recorded on alephone#11 rather than silently
+  accepted as fully fixed.

@@ -101,33 +101,36 @@ COMMON_CXXFLAGS="-O2 -std=c++17 -mmacosx-version-min=10.3 -isysroot $SDK -includ
 # bad vtable pointer -- EXC_BAD_INSTRUCTION, exactly what got hit. -force_load
 # makes every object in the given archive part of THIS binary unconditionally,
 # so there is no longer an unresolved reference for the wrong dylib to satisfy.
-# -Wl,-exported_symbols_list,<_main-only file>: alephone#11, 2026-08-29,
-# old-mac-build-host, ADDED then REVERTED same day -- real regression found
-# on real Tiger hardware, do not re-add without a Tiger-safe symbol list.
-# -force_load above stops the WRONG symbols winning, but still leaves every
-# one of ours marked "weak external" in the Mach header -- dyld's weak-symbol
-# coalescing then rebinds Leopard's OWN system libstdc++.6.dylib's internal
-# std::locale::_Impl calls into this binary's copy at load time (188
-# cross-image binds measured via DYLD_PRINT_BINDINGS on real imac-g5).
-# Restricting the executable's exported symbol table to just _main fixed
-# that on real imac-g5 hardware (0 cross-image binds, reached OpenGL init,
-# no crash-reporter entry) -- but the SAME flag, same binary, crashes
-# real mini-g4 (Tiger 10.4.11) 100% of the time, near-instantly, at process
-# *startup*, before any application code runs: EXC_BAD_ACCESS/
-# KERN_PROTECTION_FAILURE at 0x0 inside libSystem's _malloc_initialize, called
-# from dyld's imageNotification -> __keymgr_dwarf2_register_sections chain --
-# Tiger's much older dyld (46.16 vs Leopard's) apparently needs something in
-# the export table this flag strips, for its DWARF-unwind image-registration
-# handshake. Confirmed a regression, not a pre-existing issue: the identical
-# pre-flag binary ran >2min on the same mini-g4 hardware without this crash
-# (still had the original malloc-corruption warnings this ticket opened
-# with, but did not hard-crash at launch). Since this fat binary's one ppc
-# slice has to run on Tiger, Panther AND Leopard, a flag that trades a
-# confirmed Leopard fix for a 100%-reproducible Tiger launch crash is a net
-# loss -- reverted pending a narrower export list (or another mechanism)
-# that fixes Leopard without breaking Tiger's dyld. scripts/ppc-exported-
-# symbols.txt is left in the tree for that follow-up, just unreferenced here.
-COMMON_LDFLAGS="-mmacosx-version-min=10.3 -isysroot $SDK -L$DEPS/lib -L$SDL_DIR/lib -static-libstdc++ -static-libgcc -Wl,-force_load,$TOOLCHAIN/powerpc-apple-darwin8/lib/libstdc++.a -Wl,-force_load,$TOOLCHAIN/lib/gcc/powerpc-apple-darwin8/14.2.0/libgcc.a -lobjc -framework Cocoa -framework CoreFoundation -framework ApplicationServices -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework Carbon -framework IOKit -framework AGL -framework OpenGL -Wl,-w"
+# -Wl,-unexported_symbols_list,<libstdc++/__gnu_cxx/__cxxabiv1 deny-list>:
+# alephone#11, 2026-08-29. First attempt here was -exported_symbols_list
+# (an ALLOW-list of just _main) -- fixed Leopard's cross-image weak-bind
+# collision (below) but hid EVERYTHING not _main, collateral damage that
+# crashed real Tiger (mini-g4) 100% of the time at startup, before any
+# application code ran: EXC_BAD_ACCESS/KERN_PROTECTION_FAILURE at 0x0 in
+# libSystem's _malloc_initialize, via dyld's imageNotification ->
+# __keymgr_dwarf2_register_sections chain -- Tiger's old dyld (46.16) needs
+# some libgcc.a/runtime-support symbol visible for that DWARF-unwind
+# registration handshake that the blanket list also hid. Reverted, replaced
+# with a DENY-list (scripts/ppc-libstdcxx-unexport-list.txt): hides only the
+# actual collision surface (libstdc++.a's std::/__gnu_cxx::/__cxxabiv1::
+# namespaces plus global operator new/delete), leaves libgcc.a and
+# everything else exported exactly as before. Verified real hardware both
+# directions: Leopard (imac-g5) 0 cross-image libstdc++.6.dylib lazy binds
+# (down from 188 with no export restriction at all), Tiger (mini-g4) clean
+# launch, no crash-reporter entry. Panther not independently verified.
+# The list is a nm(1)-generated snapshot of the linked libstdc++/libgcc
+# symbol set at the time it was made -- regenerate it (see the file's own
+# header comment for the exact nm/awk recipe) if COMMON_LDFLAGS, the
+# toolchain, or libstdc++.a's version ever changes, and re-verify with a
+# real DYLD_PRINT_BINDINGS trace after regenerating, not just a rebuild --
+# this took multiple rounds to reach zero cross-image binds even with the
+# recipe below (Itanium name-mangling gotchas: nm -m's linkage-annotation
+# field shifts by one word for "weak external" vs "external", and some
+# real collision symbols have no textual std:: prefix at all -- global
+# operator new/delete and the Itanium ABI's single-letter substitution
+# abbreviations for the most common std types, e.g. _ZTVSi for "vtable for
+# std::istream").
+COMMON_LDFLAGS="-mmacosx-version-min=10.3 -isysroot $SDK -L$DEPS/lib -L$SDL_DIR/lib -static-libstdc++ -static-libgcc -Wl,-force_load,$TOOLCHAIN/powerpc-apple-darwin8/lib/libstdc++.a -Wl,-force_load,$TOOLCHAIN/lib/gcc/powerpc-apple-darwin8/14.2.0/libgcc.a -Wl,-unexported_symbols_list,$(pwd)/scripts/ppc-libstdcxx-unexport-list.txt -lobjc -framework Cocoa -framework CoreFoundation -framework ApplicationServices -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework Carbon -framework IOKit -framework AGL -framework OpenGL -Wl,-w"
 COMMON_CPPFLAGS="-I$DEPS/include -I$SDL_DIR/include -I$SDL_DIR/include/SDL2 -I$DEPS/include/freetype2 -isysroot $SDK -include stddef.h"
 
 echo "[configure] configuring alephone for powerpc-apple-darwin8..."

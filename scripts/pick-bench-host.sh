@@ -31,7 +31,14 @@
 # usage:
 #   scripts/pick-bench-host.sh --status [HOST ...]   # table (default: whole fleet)
 #   scripts/pick-bench-host.sh --acquire HOST LABEL  # claim it, or fail
-#   scripts/pick-bench-host.sh --run HOST LABEL -- CMD ...   # claim, run, release
+#   scripts/pick-bench-host.sh --run HOST LABEL -- CMD ...
+#       # claim HOST's lock, run CMD LOCALLY (on the caller's own machine,
+#       # NOT on HOST -- there is no remote exec here), release. If CMD needs
+#       # to actually touch HOST, it must ssh there itself, e.g.:
+#       #   --run HOST LABEL -- ssh HOST 'remote command'
+#       # Issue #49, measured live: a caller that assumes CMD runs ON HOST
+#       # gets a command that "succeeds" having proven nothing about HOST --
+#       # it silently ran on the workstation instead, with no error.
 #   scripts/pick-bench-host.sh --release HOST        # drop our claim
 #   scripts/pick-bench-host.sh --release-all         # drop our claims everywhere
 #
@@ -496,6 +503,61 @@ cmd_release() {
 						echo \"  or use a host-aware reboot recovery if the host is known safe to force.\" >&2
 					fi
 				fi
+				# Issue #39, user directive 2026-08-28: keep fleet machines tidy,
+				# not just idle -- clear (or at least flag) cruft a session left
+				# behind before releasing. Same choke point as the game check
+				# above, same WARN-don't-delete shape: a script deleting a file on
+				# someone else's machine without knowing what it is is a worse
+				# failure than leaving it (measured live 2026-08-28: quakespasm's
+				# own results.csv/raw logs are INTENTIONAL leftovers on some
+				# hosts, so blind deletion would destroy real data). Scoped to
+				# the two concrete patterns actually measured today: a stale DMG
+				# left on the Desktop (quad-tiger's Half-Life DMG) and a stray
+				# file dropped straight in /tmp (g5-desktop's g5-postreboot.png,
+				# nobody's -- flagged cross-repo, never claimed). Both are places
+				# a deploy/verify step commonly writes and rarely cleans up.
+				# Plain glob loops, not find -- POSIX sh, no GNU-only flags,
+				# same portability reasoning as clear-launch-quarantine.sh's
+				# own walk. Also sidesteps a real difference measured
+				# 2026-08-28: a sandboxed dev shell can block find's
+				# directory-traversal syscalls on /tmp while still allowing
+				# plain readdir-based globbing to see the exact same files --
+				# this fleet's actual Macs are never sandboxed, but the glob
+				# form works identically either way, so there is no reason to
+				# carry the fragile one.
+				# Run under an explicit /bin/sh, not whatever the login shell is.
+				# BUG FOUND 2026-08-28: imac-2019's login shell is zsh (the
+				# modern macOS default), and zsh's default NOMATCH option
+				# throws \"no matches found\" to stderr for a glob that matches
+				# nothing, instead of leaving it literal like sh/bash do -- the
+				# behavior the [ -e ] guards below assume. Every other host in
+				# this fleet defaults to bash or sh as the login shell, which
+				# is why this only surfaced today, on the one host that matters
+				# most. /bin/sh has existed on every OS this fleet runs since
+				# Panther; nothing here needs a login shell's own config.
+				cruft=\"\$(/bin/sh -c '
+					cruft=\"\"
+					for f in \"\$HOME\"/Desktop/*.dmg \"\$HOME\"/Desktop/*.DMG \"\$HOME\"/Desktop/*.app; do
+						[ -e \"\$f\" ] && cruft=\"\$cruft
+\$f\"
+					done
+					for f in /tmp/*; do
+						case \"\$(basename \"\$f\")\" in
+							objc_sharing_*) continue ;;
+						esac
+						[ -f \"\$f\" ] && cruft=\"\$cruft
+\$f\"
+					done
+					printf %s \"\$cruft\"
+				' 2>/dev/null | sed \"/^\$/d\")\"
+				if [ -n \"\$cruft\" ]; then
+					echo \"pick-bench-host: cruft left on \$(hostname -s 2>/dev/null || echo host) at release:\" >&2
+					echo \"\$cruft\" | while IFS= read -r f; do
+						echo \"  \$(ls -ld \"\$f\" 2>/dev/null || echo \"\$f\")\" >&2
+					done
+					echo \"  Not deleting anything -- some of this may be intentional (a port's own\" >&2
+					echo \"  results/logs). Clear it yourself if it is yours, or ask whoever's is it.\" >&2
+				fi
 			else
 				echo 'not ours; leaving it' >&2; exit 1
 			fi
@@ -505,7 +567,16 @@ cmd_release() {
 	" "&1"
 }
 
-# Claim $1, run the rest, release it however that ends.
+# Claim $1, run the rest LOCALLY (on whatever machine is running this
+# script -- NOT on $1, there is no remote exec here), release it however
+# that ends.
+#
+# Issue #49, measured live by quake3 2026-08-29: a caller assuming CMD
+# executes ON the claimed host gets a command that "succeeds" while proving
+# nothing about that host -- it silently ran on the caller's own machine
+# instead, no error, no warning. If CMD needs to touch the claimed host, it
+# must `ssh "$1" '...'` itself; --run only provides the claim/release
+# around whatever CMD actually does.
 #
 # WHY THIS EXISTS rather than an --acquire plus a trap in every caller: seven of
 # the fleet scripts already install their own `trap ... EXIT`, and bash traps
@@ -518,7 +589,7 @@ cmd_run() {
 	local h="$1" label="$2" rc
 	shift 2
 	[ "${1:-}" = "--" ] && shift
-	[ "$#" -gt 0 ] || { echo "usage: --run HOST LABEL -- CMD [ARGS...]" >&2; return 2; }
+	[ "$#" -gt 0 ] || { echo "usage: --run HOST LABEL -- CMD [ARGS...]  (CMD runs LOCALLY, under the claim -- ssh HOST yourself if CMD needs to touch HOST)" >&2; return 2; }
 	# BENCH_NO_LOCK=1 runs the command WITHOUT claiming, for debugging the picker
 	# itself. Honoured here so there is ONE implementation of the bypass that says
 	# out loud it happened, instead of N silent per-repo copies. Issue #11.

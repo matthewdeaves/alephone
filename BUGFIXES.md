@@ -255,3 +255,17 @@ Newest first.
   because it didn't exercise real iostream/string/locale-facet code the way
   the actual engine does. Recorded on alephone#11 rather than silently
   accepted as fully fixed.
+
+- **`scripts/deploy-dmg.sh` aborted the whole deploy on `yosemite` (Panther
+  10.3.9) — apps got copied but never quarantine-cleared.** `hdiutil detach
+  <mountpoint-path>` fails outright on this box ("detach failed - No such
+  file or directory"), every time, any path form tried; detaching the same
+  mount by device node works first try (real Panther `hdiutil` quirk,
+  diagnosed and reproduced by buildhost with `bash -x`, not guessed). Under
+  `set -eu` that failure aborted the script right at the unguarded `hdiutil
+  detach` call, before the quarantine-clear loop that ran after it ever got
+  a chance — apps sitting un-quarantine-cleared on a machine someone's about
+  to double-click is worse than a DMG staying mounted. Fix: reordered so
+  quarantine-clear runs before detach, and detach now looks up the device
+  node from `mount`'s own output first (falling back to the path form),
+  with either attempt logging a warning instead of aborting the script.

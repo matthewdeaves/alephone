@@ -86,10 +86,13 @@ for app in "$MOUNT"/*.app; do
 	echo "[deploy] installed $dest"
 	echo "$dest" >> "$DEPLOYED_LIST"
 done
-hdiutil detach "$MOUNT" -quiet
-rmdir "$MOUNT" 2>/dev/null || true
 [ "$FOUND" = 1 ] || { echo "deploy-dmg.sh: no .app bundles found in DMG" >&2; exit 1; }
 
+# Quarantine-clear BEFORE detaching the DMG, not after: on some boxes (found
+# on yosemite, Panther 10.3.9) hdiutil detach fails outright on the mounted
+# path, and under set -eu that used to abort the whole script before this
+# step ever ran -- apps sitting un-quarantine-cleared on a machine someone's
+# about to double-click launch is a worse failure than a DMG staying mounted.
 if [ -f "$QCLEAR" ]; then
 	chmod +x "$QCLEAR"
 	while IFS= read -r app; do
@@ -102,6 +105,21 @@ else
 	done < "$DEPLOYED_LIST"
 fi
 rm -f "$DEPLOYED_LIST"
+
+# hdiutil detach by mountpoint PATH is unreliable on some boxes (measured on
+# yosemite/Panther 10.3.9: "detach failed - No such file or directory" every
+# time, regardless of path form) -- detach by device node works first try.
+# Derive it from mount(8)'s own output and prefer that; fall back to the
+# path form if the lookup comes up empty, and don't let either failure abort
+# the deploy -- a DMG that won't detach is recoverable by hand later, unlike
+# apps that never got quarantine-cleared.
+DEV="$(mount | awk -v m="$MOUNT" '$0 ~ (" on " m " ") {print $1}')"
+if [ -n "$DEV" ]; then
+	hdiutil detach "$DEV" -quiet || echo "deploy-dmg.sh: detach by device ($DEV) failed, DMG left mounted at $MOUNT" >&2
+else
+	hdiutil detach "$MOUNT" -quiet || echo "deploy-dmg.sh: detach failed, DMG left mounted at $MOUNT" >&2
+fi
+rmdir "$MOUNT" 2>/dev/null || true
 REMOTE_DEPLOY
 
 ssh "$HOST" "rm -f '$REMOTE_DMG' '$REMOTE_QCLEAR'"

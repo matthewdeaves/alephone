@@ -300,6 +300,16 @@ bool network_gather(bool inResumingGame, bool& outUseRemoteHub)
 				{
 					// Private/self-hosted hub -- connect directly, no
 					// metaserver client, no login, no public advertisement.
+					//
+					// Crashed real hardware here first time through (EXC_BAD_ACCESS,
+					// null gMetaserverClient): the "Use Dedicated Server" toggle's UI
+					// callback force-sets advertiseOnMetaserver true for ANY remote-hub
+					// gather, manual or not, but only the metaserver-discovery branch
+					// below actually constructs gMetaserverClient/metaserverAnnouncer.
+					// The gather_success block further down unconditionally uses both
+					// whenever advertiseOnMetaserver is true -- force it false here so
+					// that stays skipped for a manual hub, which was never logged in.
+					advertiseOnMetaserver = false;
 					gather_success = network_gather_manual_remote_hub(network_preferences->manual_remote_hub_address);
 				}
 				else if (advertiseOnMetaserver)

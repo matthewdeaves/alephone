@@ -495,10 +495,19 @@ void render_view(
 				static bool logged_renderer_choice = false;
 				if (!logged_renderer_choice)
 				{
+#ifdef HAVE_OPENGL
 					const char* renderer_name =
 						(RasPtr == &Rasterizer_OGL) ? "OpenGL classic (fixed-function)" :
 						(RasPtr == &Rasterizer_Shader) ? "OpenGL shader (GLSL)" :
 						"software";
+#else
+					// Rasterizer_OGL/Rasterizer_Shader don't exist in a
+					// --disable-opengl build (RasPtr can only be
+					// &Rasterizer_SW here) -- referencing them unguarded
+					// broke the linux-without-opengl/linux-standalone-hub CI
+					// configs, which build exactly this way.
+					const char* renderer_name = "software (OpenGL not compiled in)";
+#endif
 					logNote("active renderer: %s", renderer_name);
 					logged_renderer_choice = true;
 				}

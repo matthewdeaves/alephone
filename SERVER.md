@@ -100,15 +100,21 @@ ticket if wanted.
 
 1. ~~Build `standalone_hub` in this fork and confirm it runs~~ **Done,
    measured, above.**
-2. A real gather end to end — **needs a human at a display**, or a new,
-   separately-scoped GUI-automation harness. Not attempted.
-3. Confirm a real PPC/Intel client can complete a gather against a
-   Linux-hosted `standalone_hub` — blocked on #2 either way, and separately
-   on the PPC build existing at all.
+2. ~~A real gather end to end~~ **Done, 2026-08-30, real hardware.** Needed
+   a client-side feature first: the game-setup dialog had no way to gather
+   through anything but the official metaserver's public hub list, so a
+   private `standalone_hub` (this one) was unreachable as a host target.
+   Added a "Use Custom Server Address" option (alephone#20). First real
+   attempt crashed on `Play`/start-game (null `gMetaserverClient` — the
+   "advertise on metaserver" flag gets force-enabled by the host UI for any
+   remote-hub game, but the private-hub path deliberately never logs into
+   the metaserver to go with it); fixed, then verified clean.
+3. ~~Confirm a real PPC/Intel client can complete a gather against a
+   Linux-hosted `standalone_hub`~~ **Done, 2026-08-30.** Gathered on a real
+   PowerPC Mac (`imac-g5`), joined from a real Intel Mac, and the reverse —
+   both directions, real gameplay, against `g.matthewdeaves.com`.
 4. Hosting/deployment is `retro-server-infra`'s call, not this repo's — this
    repo ships the binary/image, sequencing across repos is the manager's.
    Its ask (relayed 2026-08-23): a native Linux binary built the same way the
    other four ports release theirs, not the Docker image — matches its
-   existing bare-systemd deploy pattern. Worth building toward once item 2 is
-   resolved, `Dockerfile.hub`'s `--enable-standalone-hub --disable-opengl` is
-   the known-good compile flags to carry over.
+   existing bare-systemd deploy pattern. Already how `server-v1.0.0` ships.

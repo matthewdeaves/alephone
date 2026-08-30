@@ -21,6 +21,11 @@ itself shipped from 2011–2015 before that build was dropped for unrelated reas
 
 - Fat `ppc`/`i386`/`x86_64` build, cross-compiled with a pinned GCC 14 → PowerPC
   toolchain (upstream targets arm64/x86_64 only).
+- Real hardware-accelerated OpenGL on every supported Mac, G3 and up — including
+  GPUs with no shader support at all, and GPUs whose driver falsely claims shader
+  support it can't actually run in hardware. No software-rendering fallback.
+- Host or join a network game through your own private dedicated server, not just
+  the official public server list — see `SERVER.md`.
 - Dependency versions pinned specifically for old-hardware correctness — e.g. boost
   1.76.0 (not 1.90 — PPC regression) and openal-soft 1.23.1 (not 1.24+ — broken
   AltiVec SIMD on big-endian).

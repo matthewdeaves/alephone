@@ -1002,6 +1002,11 @@ static void change_screen_mode(int width, int height, int depth, bool nogl, bool
 		// ALEPHONE_FORCE_CLASSIC_GL=1 remains as a manual override for
 		// testing further suspect GPUs without a code change.
 		bool known_bad_shader_gpu = false;
+#ifdef HAVE_OPENGL
+		// glGetString/GL_RENDERER need real GL headers, only pulled in
+		// under HAVE_OPENGL -- same class of bug as the render.cpp fix
+		// above (Refs #7), found the same way (a --disable-opengl CI
+		// config, "GL_RENDERER was not declared in this scope").
 		{
 			const char *renderer = (const char *) glGetString(GL_RENDERER);
 			if (renderer && strstr(renderer, "Radeon 9600") != NULL) {
@@ -1011,6 +1016,7 @@ static void change_screen_mode(int width, int height, int depth, bool nogl, bool
 		if (known_bad_shader_gpu) {
 			logWarning("GPU '%s' is known to silently run GLSL shaders via a slow software fallback despite advertising support -- using classic fixed-function OpenGL instead", (const char *) glGetString(GL_RENDERER));
 		}
+#endif
 		if (known_bad_shader_gpu || getenv("ALEPHONE_FORCE_CLASSIC_GL") || !OGL_CheckExtension("GL_ARB_vertex_shader") || !OGL_CheckExtension("GL_ARB_fragment_shader") || !OGL_CheckExtension("GL_ARB_shader_objects") || !OGL_CheckExtension("GL_ARB_shading_language_100"))
 		{
 			// alephone#12: this used to fall straight through to full

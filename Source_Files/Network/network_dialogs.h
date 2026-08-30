@@ -438,6 +438,12 @@ protected:
 	ToggleWidget*       m_useUpnpWidget;
 	ToggleWidget*       m_useRemoteHub;
 	SelectorWidget*         m_latencyToleranceWidget;
+
+	// alephone#20: gather through a manually-specified hub address, for a
+	// private/self-hosted standalone_hub not registered with the official
+	// metaserver's remote-hub list.
+	ToggleWidget*       m_useManualRemoteHubWidget;
+	EditTextWidget*     m_manualRemoteHubAddressWidget;
 };
 
 

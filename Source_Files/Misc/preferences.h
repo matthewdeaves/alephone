@@ -130,6 +130,13 @@ struct network_preferences_data
 	bool advertise_on_metaserver;
 	bool attempt_upnp;
 	bool use_remote_hub;
+	// alephone#20: the metaserver-provided remote-hub list only ever
+	// contains officially-registered public hubs -- a private/self-hosted
+	// standalone_hub (e.g. a family/friends dedicated server) has no way to
+	// be gathered through otherwise. Mirrors join_by_address/join_address's
+	// shape exactly, but for the host/gather side rather than join.
+	bool use_manual_remote_hub_address;
+	char manual_remote_hub_address[256];
 	bool check_for_updates;
 	bool verify_https;
 

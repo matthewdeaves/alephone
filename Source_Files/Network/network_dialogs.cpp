@@ -233,6 +233,41 @@ static uint16 network_gather_remote_hub()
 	return remote_hub_id;
 }
 
+// alephone#20: gather through a manually-specified hub address instead of
+// the metaserver's auto-discovered public list -- for a private/self-hosted
+// standalone_hub. Reuses the same host:port parsing NetGameJoin already
+// uses for Join-by-Address, and connects directly with no metaserver
+// involvement at all (no ping/discovery, no login, no advertisement --
+// NetConnectRemoteHub itself doesn't touch the metaserver client either).
+static bool network_gather_manual_remote_hub(const std::string& address_and_port)
+{
+	open_progress_dialog(_connecting_to_remote_hub);
+
+	uint16 port = DEFAULT_GAME_PORT;
+	std::string host_str = address_and_port;
+	std::string::size_type pos = host_str.rfind(':');
+	if (pos != std::string::npos)
+	{
+		port = atoi(host_str.substr(pos + 1).c_str());
+		host_str = host_str.substr(0, pos);
+	}
+
+	bool connected = false;
+	auto address = NetGetNetworkInterface()->resolve_address(host_str, port);
+	if (address.has_value())
+	{
+		connected = NetConnectRemoteHub(address.value());
+	}
+
+	if (!connected)
+	{
+		alert_user(infoError, strNETWORK_ERRORS, netWarnRemoteHubServerNotAvailable, -1);
+	}
+
+	close_progress_dialog();
+	return connected;
+}
+
 bool network_gather(bool inResumingGame, bool& outUseRemoteHub)
 {
 	bool successful= false;
@@ -257,7 +292,17 @@ bool network_gather(bool inResumingGame, bool& outUseRemoteHub)
 			{
 				GathererAvailableAnnouncer announcer;
 
-				if (advertiseOnMetaserver)
+				bool use_manual_hub = outUseRemoteHub
+					&& network_preferences->use_manual_remote_hub_address
+					&& network_preferences->manual_remote_hub_address[0] != '\0';
+
+				if (use_manual_hub)
+				{
+					// Private/self-hosted hub -- connect directly, no
+					// metaserver client, no login, no public advertisement.
+					gather_success = network_gather_manual_remote_hub(network_preferences->manual_remote_hub_address);
+				}
+				else if (advertiseOnMetaserver)
 				{
 					if (!gMetaserverClient) gMetaserverClient = new MetaserverClient();
 
@@ -1142,6 +1187,9 @@ SetupNetgameDialog::~SetupNetgameDialog ()
 	
 	delete m_useUpnpWidget;
 	delete m_useRemoteHub;
+
+	delete m_useManualRemoteHubWidget;
+	delete m_manualRemoteHubAddressWidget;
 }
 
 bool SetupNetgameDialog::SetupNetworkGameByRunning (
@@ -1286,6 +1334,11 @@ bool SetupNetgameDialog::SetupNetworkGameByRunning (
 
 	BoolPref useRemoteHubPref(active_network_preferences->use_remote_hub);
 	binders.insert<bool>(m_useRemoteHub, &useRemoteHubPref);
+
+	BoolPref useManualRemoteHubPref(active_network_preferences->use_manual_remote_hub_address);
+	binders.insert<bool>(m_useManualRemoteHubWidget, &useManualRemoteHubPref);
+	CStringPref manualRemoteHubAddressPref(active_network_preferences->manual_remote_hub_address, 255);
+	binders.insert<std::string>(m_manualRemoteHubAddressWidget, &manualRemoteHubAddressPref);
 
 #ifdef HAVE_MINIUPNPC
 	active_network_preferences->attempt_upnp &= !active_network_preferences->use_remote_hub;
@@ -2710,6 +2763,18 @@ public:
 		network_table->dual_add(use_remote_hub_w, m_dialog);
 		network_table->dual_add(use_remote_hub_w->label("Use Dedicated Server"), m_dialog);
 
+		// alephone#20: the metaserver's remote-hub list only ever contains
+		// officially-registered public hubs -- this lets gathering happen
+		// through a private/self-hosted standalone_hub instead, the same
+		// way Join-by-Address already lets joining bypass the metaserver.
+		w_toggle* use_manual_remote_hub_w = new w_toggle(false);
+		network_table->dual_add(use_manual_remote_hub_w, m_dialog);
+		network_table->dual_add(use_manual_remote_hub_w->label("Use Custom Server Address"), m_dialog);
+
+		w_text_entry* manual_remote_hub_address_w = new w_text_entry(kJoinHintingAddressLength, "");
+		network_table->dual_add(manual_remote_hub_address_w->label("Server Address"), m_dialog);
+		network_table->dual_add(manual_remote_hub_address_w, m_dialog);
+
 #ifdef HAVE_MINIUPNPC
 		w_toggle *use_upnp_w = new w_toggle (true);
 		use_upnp_w->set_enabled(!network_preferences->use_remote_hub);
@@ -2917,6 +2982,9 @@ public:
 
 		m_useRemoteHub = new ToggleWidget(use_remote_hub_w);
 
+		m_useManualRemoteHubWidget = new ToggleWidget(use_manual_remote_hub_w);
+		m_manualRemoteHubAddressWidget = new EditTextWidget(manual_remote_hub_address_w);
+
 		m_useRemoteHub->set_callback([&]()
 		{
 			if (m_useRemoteHub->get_value())
@@ -2925,6 +2993,7 @@ public:
 				m_useMetaserverWidget->deactivate();
 				m_useUpnpWidget->set_value(false);
 				m_useUpnpWidget->deactivate();
+				m_useManualRemoteHubWidget->activate();
 			}
 			else
 			{
@@ -2932,8 +3001,31 @@ public:
 #ifdef HAVE_MINIUPNPC
 				m_useUpnpWidget->activate();
 #endif
+				// Meaningless without remote-hub mode -- force off too, so
+				// a stale checked state from a previous session can't
+				// silently take effect the next time remote hub is enabled.
+				m_useManualRemoteHubWidget->set_value(false);
+				m_useManualRemoteHubWidget->deactivate();
+				m_manualRemoteHubAddressWidget->deactivate();
 			}
 		});
+
+		m_useManualRemoteHubWidget->set_callback([&]()
+		{
+			if (m_useManualRemoteHubWidget->get_value())
+				m_manualRemoteHubAddressWidget->activate();
+			else
+				m_manualRemoteHubAddressWidget->deactivate();
+		});
+
+		if (!network_preferences->use_remote_hub)
+		{
+			m_useManualRemoteHubWidget->deactivate();
+		}
+		if (!network_preferences->use_remote_hub || !network_preferences->use_manual_remote_hub_address)
+		{
+			m_manualRemoteHubAddressWidget->deactivate();
+		}
 	}
 	
 	virtual bool Run ()

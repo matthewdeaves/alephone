@@ -37,13 +37,11 @@ build.
 
 ## How this was built
 
-This port was built by [Claude Code](https://claude.com/claude-code) working under
-direction, not hand-written line by line. The interesting part wasn't writing the
-code — it was debugging it: cross-compiler bring-up, PPC-specific miscompilations,
-and OpenGL driver quirks all needed to be chased down on **real vintage hardware**
-(actual G3/G4/G5 Macs on Panther, Tiger, and Leopard), using live crash reports and
-CPU profiling, not guesswork. `BUGFIXES.md` is the honest log of what broke and how
-it was actually diagnosed and fixed.
+Development is an automated AI loop, Claude Code under my direction: implement,
+build, deploy to real hardware, run it there, iterate. Bugs are found and fixed
+against real G3/G4/G5 Macs on Panther, Tiger, and Leopard, using crash reports and
+CPU profiling from that hardware. `BUGFIXES.md` logs what broke and how it was
+fixed.
 
 ## Building from source
 

@@ -977,7 +977,41 @@ static void change_screen_mode(int width, int height, int depth, bool nogl, bool
 #if defined (__WIN32__) && (HAVE_OPENGL)
 		glewInit();
 #endif
-		if (!OGL_CheckExtension("GL_ARB_vertex_shader") || !OGL_CheckExtension("GL_ARB_fragment_shader") || !OGL_CheckExtension("GL_ARB_shader_objects") || !OGL_CheckExtension("GL_ARB_shading_language_100"))
+		// Extension-presence checks below are necessary but not sufficient.
+		// Apple's Leopard-era ATI R300-class driver advertises
+		// GL_ARB_fragment_shader/shading_language_100 and passes every
+		// extension check here, then silently executes
+		// RenderRasterize_Shader.cpp's actual fragment programs through a
+		// software LLVM interpreter (gldLLVMFPTransformFallback ->
+		// glvmInterpretFPTransformFour) one fragment at a time instead of
+		// on the GPU. Measured 2026-08-30 on a real PowerMac G5 with an ATI
+		// Radeon 9600 (RV351): `sample` during real gameplay showed ~15% of
+		// render-thread samples landing in that call chain from
+		// RenderRasterize_Shader::render_node_object alone, and the game
+		// was reported unplayably slow. Forcing the classic fixed-function
+		// renderer (which this same driver does run natively -- confirmed
+		// by the same profiling method showing zero fallback hits, and a
+		// real playtest reported as "totally playable") fixes it. The
+		// extensions being present says nothing about whether a given GPU
+		// runs *our* shaders natively, and there is no portable way to
+		// query that in advance -- so this is a targeted GL_RENDERER
+		// string match on the one card confirmed bad, not a broad
+		// heuristic. Other R300-family parts (9500/9700/9800, X300-X800)
+		// are plausible candidates for the same bug but are NOT confirmed;
+		// don't add them here without the same real-hardware measurement.
+		// ALEPHONE_FORCE_CLASSIC_GL=1 remains as a manual override for
+		// testing further suspect GPUs without a code change.
+		bool known_bad_shader_gpu = false;
+		{
+			const char *renderer = (const char *) glGetString(GL_RENDERER);
+			if (renderer && strstr(renderer, "Radeon 9600") != NULL) {
+				known_bad_shader_gpu = true;
+			}
+		}
+		if (known_bad_shader_gpu) {
+			logWarning("GPU '%s' is known to silently run GLSL shaders via a slow software fallback despite advertising support -- using classic fixed-function OpenGL instead", (const char *) glGetString(GL_RENDERER));
+		}
+		if (known_bad_shader_gpu || getenv("ALEPHONE_FORCE_CLASSIC_GL") || !OGL_CheckExtension("GL_ARB_vertex_shader") || !OGL_CheckExtension("GL_ARB_fragment_shader") || !OGL_CheckExtension("GL_ARB_shader_objects") || !OGL_CheckExtension("GL_ARB_shading_language_100"))
 		{
 			// alephone#12: this used to fall straight through to full
 			// software rendering -- the only other option that existed.

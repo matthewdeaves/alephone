@@ -3,6 +3,53 @@
 One short entry per real bug fixed in this fork: what it was, what the fix was.
 Newest first.
 
+- **PPC/Leopard on ATI R300-class cards: shader renderer unplayably slow
+  (~0.5fps) despite the driver reporting full GLSL support** (alephone#16).
+  Reported repeatedly on real `imac-g5` hardware (ATI Radeon 9600/RV351)
+  while the same build "played lovely" on `mini-g4` (older GPU, correctly
+  falls back to the classic renderer). Two real, separate contributors,
+  found in that order:
+  1. `RenderRasterize_Shader::render_node_floor_or_ceiling` and
+     `render_viewer_sprite` drew with `GL_POLYGON`, a primitive type badly
+     supported on legacy hardware, `sample`-profiled at real gameplay time
+     landing 28% of samples in Apple's software-rendering-plugin fallback
+     (`gleFallbackBegin`). Fixed by switching to `GL_TRIANGLE_FAN`/
+     `GL_QUADS` (commit 675a0ea6). This helped (user-confirmed: "a little
+     bit better") but did not fix the actual problem — the dominant cost
+     was elsewhere.
+  2. The real dominant cost, found by re-profiling real gameplay with fix
+     #1 already applied: `RenderRasterize_Shader::render_node_object`
+     (drawing every in-world sprite — monsters, items, weapons) uses a real
+     GLSL shader (`Shader::S_Sprite` etc. via `setupSpriteTexture`). Apple's
+     Leopard-era ATI R300 driver advertises `GL_ARB_fragment_shader` /
+     `GL_ARB_shading_language_100` and passes every capability check the
+     game does at startup — but at *runtime* it silently executes that
+     shader through a software LLVM interpreter
+     (`gldLLVMFPTransformFallback` -> `glvmInterpretFPTransformFour`) one
+     fragment at a time instead of on the GPU. `sample` showed ~15% of
+     render-thread time in that single call chain; the "sort by top of
+     stack" summary was dominated by `glvm*`/LLVM-register-allocator
+     symbols, not game code. There is no portable way to query "will this
+     GPU actually run my shader in hardware" in advance — extension
+     presence says nothing about it. Fixed in `screen.cpp`'s renderer setup
+     with a targeted `GL_RENDERER` string match ("Radeon 9600") that forces
+     the classic fixed-function renderer (`Rasterizer_OGL_Class`/
+     `OGL_Render.cpp`, dormant since 2009 but still fully wired up and, on
+     this exact driver, genuinely hardware-accelerated) instead of the
+     shader renderer. Verified three ways on real `imac-g5` hardware: (a) a
+     fresh 30s gameplay `sample` after the fix shows zero
+     `gldLLVMFPTransformFallback`/`glvmInterpretFPTransformFour` hits, with
+     the render thread now mostly idle/waiting rather than pegged; (b) the
+     same result with the renderer forced manually via
+     `ALEPHONE_FORCE_CLASSIC_GL=1` (kept as a diagnostic override for
+     testing other suspect GPUs, since more R300-family parts — 9500/9700/
+     9800, X300-X800 — are plausible candidates for the same bug but are
+     NOT confirmed and deliberately not blocklisted without the same kind
+     of real-hardware measurement); (c) the user's own real playtest,
+     first "still not playable" with only fix #1, then "totally playable"
+     and "playing lovely" with fix #2, both with and without the env var
+     forcing it.
+
 - **PPC/Leopard: two separate 100%-reproducible SIGILL crashes on every
   launch** (alephone#11), found chasing "human double-click launch
   unreliable" (alephone#5) onto real `imac-g5` (10.5.8) hardware. Both

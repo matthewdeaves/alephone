@@ -316,3 +316,39 @@ Newest first.
   quarantine-clear runs before detach, and detach now looks up the device
   node from `mount`'s own output first (falling back to the path form),
   with either attempt logging a warning instead of aborting the script.
+
+- **arm64 slice (alephone#17): `configure.ac` unconditionally linked
+  `-framework AGL` for any Darwin target, and AGL.framework is gone entirely
+  from Xcode 26's SDK.** Building the new native arm64 slice failed at link
+  time: `ld: framework 'AGL' not found`. AGL is Carbon-era and nothing in
+  this codebase actually calls into it any more — the handful of "AGL" hits
+  under `Source_Files/` are historic changelog comments, not live code; SDL2
+  owns GL context creation and buffer swap. Fixed by probing for it with a
+  real `AC_LINK_IFELSE` check instead of assuming it, so the older PPC/Intel
+  SDKs that still ship AGL keep linking it exactly as before, and only a
+  sysroot that genuinely lacks it (arm64's, so far) drops it.
+
+- **arm64 slice: openal-soft 1.25.2's own build enables
+  `-Werror=function-effects` on clang ≥ 20, and Xcode 26/clang 21's
+  `CoreAudioTypes.framework` header trips it on `coreaudio.cpp`'s
+  `inputProc` lambdas** ("attribute 'nonblocking' should not be added via
+  type conversion") — a real upstream/SDK version mismatch, not a behavior
+  change; removing the lambdas' `noexcept` didn't help, since the diagnostic
+  turned out to be about the target C function-pointer type, not the source
+  lambda. Fixed at the dependency's own build config (forcing
+  `HAVE_WFUNCTION_EFFECTS` off in its `CMakeLists.txt`), not by patching
+  engine code.
+
+- **imac-2019 as an x86_64 build host (alephone#15): the shared GCC 7.5
+  bootstrap cross-toolchain doesn't run on Sequoia at all.** It exists to
+  build the PPC cross-compiler on Lion, not to compile application code, and
+  its own bundled `ld` can't find `libSystem` on a modern host: `ld:
+  library 'System' not found`. `build.sh`'s x86_64 branch now probes for a
+  working link with that toolchain at runtime rather than assuming it works
+  everywhere, and falls back to native clang + Homebrew where it doesn't —
+  imac-2019 is genuinely x86_64, so cross-compiling through an old bootstrap
+  compiler there was never necessary. That fallback path's deployment-target
+  floor is 10.9, not the GCC 7.5 path's 10.6: asio needs `__thread`-based
+  TLS, unsupported by the Mach-O ABI below 10.7, measured directly (a bare
+  `#include <asio.hpp>` fails to compile at `-mmacosx-version-min=10.6`,
+  "thread-local storage is not supported for the current target").

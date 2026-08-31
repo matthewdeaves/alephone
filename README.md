@@ -43,8 +43,8 @@ current dependency versions rather than the old pins the other slices need.
 ## Dedicated server
 
 Details on hosting your own game (the client feature above) are in `SERVER.md`.
-The actual server deployment/infra lives in the separate `retro-server-infra`
-repo.
+The actual server deployment/infra lives in the separate
+[retro-server-infra](https://github.com/matthewdeaves/retro-server-infra) repo.
 
 ## Downloads
 

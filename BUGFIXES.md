@@ -352,3 +352,25 @@ Newest first.
   TLS, unsupported by the Mach-O ABI below 10.7, measured directly (a bare
   `#include <asio.hpp>` fails to compile at `-mmacosx-version-min=10.6`,
   "thread-local storage is not supported for the current target").
+
+- **Real crash on a real G3 (`yosemite`, 10.3.9): `SDL_OpenFPFromBundleOrFallback`
+  called `[NSAutoreleasePool drain]`, and `-drain` doesn't exist on Panther.**
+  Crash reporter (Aleph One's own launch, not a synthetic repro): `EXC_BREAKPOINT`
+  in `_NSRaiseError`, reached via Objective-C message forwarding
+  (`_objc_msgForward` → `-[NSObject(NSForwardInvocation) forward::]` →
+  `+[NSException raise:format:]`) — the signature of an unrecognized selector,
+  not a real exception path. Full stack: `ScenarioChooser::add_scenario` →
+  `ScenarioChooserScenario::load` → `FileSpecifier::Open` → `SDL_RWFromFile` →
+  `SDL_OpenFPFromBundleOrFallback`, i.e. before the interactive scenario-chooser
+  screen even appears — every launch on a real 10.3.9 machine hit this.
+  `-drain` is a Mac OS X 10.4+ addition (a GC-aware synonym for `-release`);
+  Panther's Foundation (6.3.6, confirmed from the crash report itself) has no
+  such method, so the call falls through Objective-C's forwarding machinery
+  into an uncaught `NSException`. Root cause was in `panther-sdl2` (the fleet's
+  own SDL 2.0.3 fork for Panther/Tiger, shared with other ports — not something
+  in alephone's own source), fixed there by swapping to `-release`, which has
+  existed since NSObject/NSAutoreleasePool day one and is the exact non-GC
+  equivalent (this project never runs under Objective-C GC, so the two are
+  behaviorally identical everywhere `-drain` also worked). Rebuilt the ppc
+  slice's SDL2 against the fix and reverified on the same real G3: process
+  reaches the scenario chooser and plays correctly, no new crash report.

@@ -59,8 +59,8 @@ fixed.
 
 Upstream's build instructions (Linux/Windows/vcpkg-based macOS) still apply and are
 unchanged — see [the original README](https://github.com/Aleph-One-Marathon/alephone#readme).
-For the PPC/Intel fat-binary build specific to this fork, see `PORTING-PPC.md` and
-`scripts/build.sh`.
+For the PPC/Intel/Apple Silicon fat-binary build specific to this fork, see
+`PORTING-PPC.md`, `scripts/build.sh`, and `scripts/build-arm64.sh`.
 
 ## License
 

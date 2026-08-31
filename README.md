@@ -40,6 +40,12 @@ current dependency versions rather than the old pins the other slices need.
   weak-symbol collisions with system libraries, and a GPU driver that silently ran
   shaders in software instead of on the GPU. Full write-ups in `BUGFIXES.md`.
 
+## Dedicated server
+
+Details on hosting your own game (the client feature above) are in `SERVER.md`.
+The actual server deployment/infra lives in the separate
+[retro-server-infra](https://github.com/matthewdeaves/retro-server-infra) repo.
+
 ## Downloads
 
 Prebuilt DMGs are on the [Releases page](https://github.com/matthewdeaves/alephone/releases).

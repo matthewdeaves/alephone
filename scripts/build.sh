@@ -198,6 +198,26 @@ DEPS=/Users/mini/alephone-intel-deps
 TOOLCHAIN=/Users/mini/gcc14-ppc-build/tools/gcc-7.5.0-host
 SDL_DIR=/Users/mini/oldmac/sdl2-x86_64
 
+# alephone#15: that GCC 7.5 bootstrap exists to build the PPC cross-toolchain
+# on Lion, not to compile application code, and doesn't run at all on modern
+# hosts like imac-2019/Sequoia ("ld: library 'System' not found" -- its own
+# bundled ld can't find libSystem there). Probe for a working link, not a
+# hostname or OS version, matching this repo's existing "runtime detection,
+# not per-machine tuning" convention (see the ppc branch's SDK path check
+# above): any host where this genuinely works keeps using it unchanged.
+_old_toolchain_works=0
+if [ -x "$TOOLCHAIN/bin/gcc-7" ]; then
+	if echo 'int main(){return 0;}' > /tmp/alephone_cc_probe.c && \
+	   "$TOOLCHAIN/bin/gcc-7" /tmp/alephone_cc_probe.c -o /tmp/alephone_cc_probe 2>/dev/null && \
+	   /tmp/alephone_cc_probe; then
+		_old_toolchain_works=1
+	fi
+	rm -f /tmp/alephone_cc_probe.c /tmp/alephone_cc_probe
+fi
+
+if [ "$_old_toolchain_works" = 1 ]; then
+echo "[build] using GCC 7.5 cross-toolchain (10.6 floor)"
+
 # Ensure SDL2 headers accessible as <SDL2/SDL.h> and <SDL.h>
 ln -sf "$SDL_DIR/include/SDL2" "$DEPS/include/SDL2"
 cp "$DEPS/include/SDL2/SDL_ttf.h" "$DEPS/include/" 2>/dev/null || true
@@ -245,6 +265,133 @@ echo "[configure] configuring alephone for x86_64-apple-darwin..."
 echo "[build] running make -j2..."
 make -j2 > /tmp/alephone_intel_build.log 2>&1 || { tail -50 /tmp/alephone_intel_build.log; exit 1; }
 
+else
+echo "[build] GCC 7.5 cross-toolchain doesn't run here -- using native clang + Homebrew (10.9 floor)"
+
+# alephone#15. Deliberately NOT the same recipe as the GCC 7.5 path: this is
+# native compilation (imac-2019 IS x86_64), so there is no reason to route
+# through a cross-bootstrap compiler at all. Mirrors scripts/build-arm64.sh's
+# shape closely -- Homebrew for boost/asio/freetype/libsndfile(+codec chain)/
+# libpng, a from-source static SDL2_ttf and openal-soft (Homebrew ships
+# neither in the shape this port wants), the fleet's existing pinned SDL2 at
+# $SDL_DIR (already provisioned for the GCC 7.5 path above, reused as-is).
+#
+# Floor is 10.9, not 10.6 like the GCC 7.5 path: asio needs `__thread`-based
+# TLS, which Clang/the Mach-O ABI only support from 10.7 on -- measured
+# directly (a bare `#include <asio.hpp>` fails to compile at
+# -mmacosx-version-min=10.6, "thread-local storage is not supported for the
+# current target"). 10.9 gives headroom above that hard floor rather than
+# hugging it exactly. This path is therefore NOT a drop-in replacement for
+# the GCC 7.5 path's 10.6 floor -- it's what runs on a host where that path
+# is unavailable at all, which beats no x86_64 build on that host.
+DEPS_NATIVE=~/alephone-intel-deps-native
+STATICONLY="$DEPS_NATIVE/static-only"
+mkdir -p "$DEPS_NATIVE/lib" "$DEPS_NATIVE/include" "$STATICONLY"
+BOOST="$(brew --prefix boost)"
+ASIO="$(brew --prefix asio)"
+FREETYPE="$(brew --prefix freetype)"
+SNDFILE="$(brew --prefix libsndfile)"
+VMIN=10.9
+
+for pkg in boost asio libsndfile openal-soft cmake freetype libpng flac libogg libvorbis opus mpg123 lame; do
+	brew list --versions "$pkg" > /dev/null 2>&1 || brew install "$pkg"
+done
+
+# static-only/: symlinks to ONLY the .a of each Homebrew dep this port also
+# has a .dylib for, so a bare -lname resolves to the static archive instead
+# of whichever -L directory's dylib the linker would otherwise prefer -- see
+# build-arm64.sh's own block comment for the full reasoning (same shim, same
+# purpose, different architecture).
+for pair in \
+	"boost/lib/libboost_filesystem.a:$BOOST" \
+	"freetype/lib/libfreetype.a:$FREETYPE" \
+	"libsndfile/lib/libsndfile.a:$SNDFILE" \
+	"libpng/lib/libpng16.a:$(brew --prefix libpng)" \
+	"flac/lib/libFLAC.a:$(brew --prefix flac)" \
+	"libogg/lib/libogg.a:$(brew --prefix libogg)" \
+	"libvorbis/lib/libvorbis.a:$(brew --prefix libvorbis)" \
+	"libvorbis/lib/libvorbisenc.a:$(brew --prefix libvorbis)" \
+	"opus/lib/libopus.a:$(brew --prefix opus)" \
+	"mpg123/lib/libmpg123.a:$(brew --prefix mpg123)" \
+	"lame/lib/libmp3lame.a:$(brew --prefix lame)" \
+	; do
+	_rel="${pair%%:*}"; _prefix="${pair##*:}"
+	_base="$(basename "$_rel")"
+	ln -sf "$_prefix/lib/$_base" "$STATICONLY/$_base"
+done
+ln -sf "$(brew --prefix libpng)/lib/libpng16.a" "$STATICONLY/libpng.a"
+
+if [ ! -f "$DEPS_NATIVE/lib/libSDL2_ttf.a" ]; then
+	_work="$(mktemp -d)"
+	curl -sL "https://github.com/libsdl-org/SDL_ttf/releases/download/release-2.24.0/SDL2_ttf-2.24.0.tar.gz" -o "$_work/sdl2ttf.tar.gz"
+	tar xzf "$_work/sdl2ttf.tar.gz" -C "$_work"
+	cmake -S "$_work/SDL2_ttf-2.24.0" -B "$_work/SDL2_ttf-2.24.0/build" \
+		-DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET="$VMIN" \
+		-DBUILD_SHARED_LIBS=OFF -DSDL2TTF_HARFBUZZ=OFF -DSDL2TTF_VENDORED=OFF -DSDL2TTF_SAMPLES=OFF \
+		-DFREETYPE_INCLUDE_DIRS="$FREETYPE/include/freetype2" \
+		-DFREETYPE_LIBRARY="$FREETYPE/lib/libfreetype.a" \
+		-DSDL2_INCLUDE_DIR="$SDL_DIR/include/SDL2" \
+		-DSDL2_LIBRARY="$SDL_DIR/lib/libSDL2.dylib" \
+		-DCMAKE_INSTALL_PREFIX="$DEPS_NATIVE" > /tmp/sdl2ttf_cfg.log 2>&1 || { tail -40 /tmp/sdl2ttf_cfg.log; exit 1; }
+	cmake --build "$_work/SDL2_ttf-2.24.0/build" -j"$(sysctl -n hw.ncpu)" > /tmp/sdl2ttf_build.log 2>&1 || { tail -60 /tmp/sdl2ttf_build.log; exit 1; }
+	cmake --install "$_work/SDL2_ttf-2.24.0/build" > /tmp/sdl2ttf_install.log 2>&1
+	rm -rf "$_work"
+fi
+
+if [ ! -f "$DEPS_NATIVE/lib/libopenal.a" ]; then
+	_work="$(mktemp -d)"
+	curl -sL "https://github.com/kcat/openal-soft/archive/refs/tags/1.25.2.tar.gz" -o "$_work/oal.tar.gz"
+	tar xzf "$_work/oal.tar.gz" -C "$_work"
+	_oal="$_work/openal-soft-1.25.2"
+	cmake -S "$_oal" -B "$_oal/build" \
+		-DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET="$VMIN" \
+		-DLIBTYPE=STATIC -DALSOFT_BACKEND_PORTAUDIO=OFF -DALSOFT_BACKEND_PULSEAUDIO=OFF \
+		-DALSOFT_UTILS=OFF -DALSOFT_EXAMPLES=OFF -DALSOFT_INSTALL_EXAMPLES=OFF -DALSOFT_INSTALL_UTILS=OFF \
+		-DCMAKE_INSTALL_PREFIX="$DEPS_NATIVE" > /tmp/oal_cfg.log 2>&1 || { tail -40 /tmp/oal_cfg.log; exit 1; }
+	cmake --build "$_oal/build" -j"$(sysctl -n hw.ncpu)" > /tmp/oal_build.log 2>&1 || { tail -80 /tmp/oal_build.log; exit 1; }
+	cmake --install "$_oal/build" > /tmp/oal_install.log 2>&1
+	rm -rf "$_work"
+fi
+
+export CC=clang CXX=clang++ OBJCXX=clang++
+export PKG_CONFIG_PATH="$DEPS_NATIVE/lib/pkgconfig:$SDL_DIR/lib/pkgconfig"
+
+COMMON_CFLAGS="-O2 -mmacosx-version-min=$VMIN"
+# -fno-aligned-allocation: OpenALManager.cpp has a type needing over-default
+# alignment, and C++17's aligned new/delete ABI only landed in libc++abi at
+# 10.14 -- Clang refuses to emit the call below that deployment target
+# ("only available on macOS 10.14 or newer"). This falls back to alignment
+# handling that doesn't need that runtime symbol; the GCC 7.5 path above
+# never hits this at all.
+COMMON_CXXFLAGS="-O2 -std=c++17 -mmacosx-version-min=$VMIN -fno-aligned-allocation"
+COMMON_LDFLAGS="-mmacosx-version-min=$VMIN -L$STATICONLY -L$DEPS_NATIVE/lib -L$SDL_DIR/lib -L$BOOST/lib -lc++ -lobjc -framework Cocoa -framework CoreFoundation -framework ApplicationServices -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework Carbon -framework IOKit -Wl,-w"
+COMMON_CPPFLAGS="-I$DEPS_NATIVE/include -I$SDL_DIR/include -I$SDL_DIR/include/SDL2 -I$ASIO/include -I$FREETYPE/include/freetype2 -I$BOOST/include"
+
+echo "[configure] configuring alephone for x86_64-apple-darwin (native)..."
+./configure \
+    --without-vpx --without-matroska --without-ebml --without-libyuv --without-nfd \
+    --without-curl --without-zzip --without-miniupnpc --without-sdl_image --disable-steam --without-catch2 \
+    --without-vorbis --without-vorbisenc --without-png \
+    --with-boost="$BOOST" --with-boost-libdir="$STATICONLY" \
+    CC="$CC" CXX="$CXX" OBJCXX="$OBJCXX" \
+    CFLAGS="$COMMON_CFLAGS" CXXFLAGS="$COMMON_CXXFLAGS" OBJCXXFLAGS="$COMMON_CXXFLAGS" \
+    CPPFLAGS="$COMMON_CPPFLAGS" LDFLAGS="$COMMON_LDFLAGS" \
+    BOOST_CPPFLAGS="-I$BOOST/include" \
+    SDL_CFLAGS="-I$SDL_DIR/include -I$SDL_DIR/include/SDL2 -D_THREAD_SAFE" \
+    SDL_LIBS="-L$SDL_DIR/lib -lSDL2 -lobjc -framework Cocoa -framework Carbon -framework IOKit -framework CoreAudio -framework AudioToolbox -framework AudioUnit" \
+    SDL_TTF_CFLAGS="-I$DEPS_NATIVE/include -I$DEPS_NATIVE/include/SDL2 -I$FREETYPE/include/freetype2 -D_THREAD_SAFE" \
+    SDL_TTF_LIBS="-L$DEPS_NATIVE/lib -lSDL2_ttf -L$STATICONLY -lfreetype -lpng -lbz2" \
+    ZLIB_CFLAGS="" ZLIB_LIBS="-lz" \
+    SNDFILE_CFLAGS="-I$SNDFILE/include" \
+    SNDFILE_LIBS="-L$STATICONLY -lsndfile -lFLAC -lvorbis -lvorbisenc -logg -lopus -lmpg123 -lmp3lame" \
+    OPENAL_CFLAGS="-I$DEPS_NATIVE/include -I$DEPS_NATIVE/include/AL" \
+    OPENAL_LIBS="-L$DEPS_NATIVE/lib -lopenal" \
+    > /tmp/alephone_intel_config.log 2>&1 || { tail -50 /tmp/alephone_intel_config.log; exit 1; }
+
+echo "[build] running make -j$(sysctl -n hw.ncpu)..."
+make -j"$(sysctl -n hw.ncpu)" > /tmp/alephone_intel_build.log 2>&1 || { tail -50 /tmp/alephone_intel_build.log; exit 1; }
+fi
+
 echo "[build] x86_64 slice build succeeded: $(ls -la Source_Files/alephone)"
 REMOTE_BUILD
 
@@ -255,16 +402,18 @@ REMOTE_BUILD
 		# SDL2 is the one dependency of the 6 in legacy-mac-hardware.md that is
 		# NOT statically linked on x86_64 (everything else -- SDL2_ttf, boost,
 		# asio, libsndfile, openal-soft -- builds --enable-static per
-		# build-deps-intel.sh). It links against $SDL_DIR/lib on the build
-		# host as a bare absolute path, which only exists on machines that
-		# happen to share that exact filesystem layout -- measured 2026-08-28
-		# (alephone#5): a fresh x86_64 build crashed at launch on imac-2019
-		# with `Library not loaded: /Users/mini/oldmac/sdl2-x86_64/lib/
-		# libSDL2-2.0.0.dylib`, dyld "Library missing". Fetch the actual
-		# dylib alongside the binary so package-dmg.sh can bundle it into
-		# each app's Contents/Frameworks and retarget the load command to
-		# @executable_path -- the same self-contained shape quakespasm ships
-		# SDL.framework in, not a fixed host path.
+		# build-deps-intel.sh, or from source above on the native-clang path).
+		# It links against $SDL_DIR/lib on the build host as a bare absolute
+		# path, which only exists on machines that happen to share that exact
+		# filesystem layout -- measured 2026-08-28 (alephone#5): a fresh
+		# x86_64 build crashed at launch on imac-2019 with `Library not
+		# loaded: /Users/mini/oldmac/sdl2-x86_64/lib/libSDL2-2.0.0.dylib`,
+		# dyld "Library missing". Fetch the actual dylib alongside the binary
+		# so package-dmg.sh can bundle it into each app's Contents/Frameworks
+		# and retarget the load command to @executable_path -- the same
+		# self-contained shape quakespasm ships SDL.framework in, not a fixed
+		# host path. Both toolchain paths above use the SAME $SDL_DIR, so this
+		# one fetch/retarget step covers either.
 		mkdir -p "$REPO_ROOT/build/deps-x86_64"
 		scp -q "$BUILD_HOST:/Users/mini/oldmac/sdl2-x86_64/lib/libSDL2-2.0.0.dylib" \
 			"$REPO_ROOT/build/deps-x86_64/libSDL2-2.0.0.dylib"

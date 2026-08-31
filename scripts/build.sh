@@ -303,12 +303,63 @@ REMOTE_BUILD
 		else
 			"$0" x86_64
 		fi
+
+		# arm64 (alephone#17) is OPTIONAL here, not required, matching the
+		# shape every other port in this fleet already uses for it
+		# (old-mac-build-host docs/apple-silicon-arm64.md: "every one of the
+		# three fuses treats its arm64 slice as OPTIONAL, so a slice that
+		# failed to arrive does not stop a release"). It can only be BUILT on
+		# an actual Apple Silicon Mac (scripts/build-arm64.sh checks
+		# `uname -m` itself and refuses otherwise) -- this workstation is the
+		# only one in the fleet, but `fat` should still produce a working
+		# ppc+x86_64 binary if run somewhere that isn't it, rather than fail
+		# outright over a slice nothing there can ever build.
+		if [ "$(uname -m)" = "arm64" ]; then
+			if [ -f "$REPO_ROOT/build/alephone-arm64" ] && source_stamp_verify "$REPO_ROOT/build/stamp-arm64" "$_stamp_now"; then
+				echo "[fat] arm64 slice already current (source stamp match), skipping rebuild"
+			else
+				"$REPO_ROOT/scripts/build-arm64.sh"
+			fi
+		elif [ -f "$REPO_ROOT/build/alephone-arm64" ]; then
+			# Staged in from elsewhere (e.g. copied off the workstation).
+			# Freshness can't be proven on a machine that can't recompute
+			# what it should hash against -- see source-stamp.sh's own
+			# "slice that can go stale" warning -- so this is used as-is,
+			# loudly, rather than silently trusted or silently dropped.
+			echo "[fat] arm64 slice present but this is not an arm64 machine -- using it as-is, staleness NOT verified"
+		else
+			echo "[fat] no arm64 slice and this is not an arm64 machine -- building ppc+x86_64 only"
+		fi
+
 		echo "[fat] creating Universal fat binary..."
-		lipo -create -output "$REPO_ROOT/build/alephone" \
-			"$REPO_ROOT/build/alephone-ppc" \
-			"$REPO_ROOT/build/alephone-x86_64"
+		_fat_inputs="$REPO_ROOT/build/alephone-ppc $REPO_ROOT/build/alephone-x86_64"
+		_fat_slices="ppc x86_64"
+		if [ -f "$REPO_ROOT/build/alephone-arm64" ]; then
+			_fat_inputs="$_fat_inputs $REPO_ROOT/build/alephone-arm64"
+			_fat_slices="$_fat_slices arm64"
+		fi
+		echo "[fat] slices included: $_fat_slices"
+		lipo -create -output "$REPO_ROOT/build/alephone" $_fat_inputs
 		echo "[fat] Universal binary created at build/alephone:"
 		lipo -info "$REPO_ROOT/build/alephone"
+
+		# ppc statically links SDL2; x86_64 and arm64 both bundle it as a
+		# dylib (see build.sh's x86_64 branch and build-arm64.sh), each
+		# already retargeted to the SAME install name
+		# (@executable_path/../Frameworks/libSDL2-2.0.0.dylib) on their own
+		# thin slice. Fuse the two into ONE universal dylib rather than
+		# shipping two files under one name -- dyld picks the right slice
+		# out of a fat dylib automatically, same as it does for the app
+		# binary itself, and package-dmg.sh only has one Frameworks/ entry
+		# to bundle either way.
+		if [ -f "$REPO_ROOT/build/deps-arm64/libSDL2-2.0.0.dylib" ]; then
+			mkdir -p "$REPO_ROOT/build/deps-fat"
+			lipo -create -output "$REPO_ROOT/build/deps-fat/libSDL2-2.0.0.dylib" \
+				"$REPO_ROOT/build/deps-x86_64/libSDL2-2.0.0.dylib" \
+				"$REPO_ROOT/build/deps-arm64/libSDL2-2.0.0.dylib"
+			echo "[fat] fused universal SDL2 dylib at build/deps-fat/libSDL2-2.0.0.dylib:"
+			lipo -info "$REPO_ROOT/build/deps-fat/libSDL2-2.0.0.dylib"
+		fi
 		;;
 
 	*)

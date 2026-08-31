@@ -200,7 +200,24 @@ AS_IF([test "x$enable_opengl" != "xno"],
                   dnl which can require APIs the target SDK doesn't have (dispatch.h).
                   dnl -isysroot (or the native default on a non-cross build) already
                   dnl resolves system frameworks correctly without it.
-                  SYS_GL_LIBS="-framework AGL -framework OpenGL"
+                  dnl
+                  dnl AGL.framework itself is Carbon-era and gone entirely from
+                  dnl recent macOS SDKs -- found building the arm64 slice
+                  dnl (2026-08-31, native on Xcode 26): "ld: framework 'AGL' not
+                  dnl found". Nothing in this codebase calls into it any more --
+                  dnl the handful of "AGL" hits under Source_Files/ are historic
+                  dnl changelog comments, not live code; SDL2 owns GL context
+                  dnl creation and buffer swap. Probe for it with a real link
+                  dnl check rather than assuming either way, so the older PPC/
+                  dnl Intel SDKs that still ship it keep linking it exactly as
+                  dnl before, and only a sysroot that genuinely lacks it (the
+                  dnl arm64 slice's, so far) drops it.
+                  save_LIBS_agl_probe="$LIBS"
+                  LIBS="-framework AGL $LIBS"
+                  AC_LINK_IFELSE([AC_LANG_PROGRAM([[]], [[]])],
+                                 [ SYS_GL_LIBS="-framework AGL -framework OpenGL" ],
+                                 [ SYS_GL_LIBS="-framework OpenGL" ])
+                  LIBS="$save_LIBS_agl_probe"
                   CPPFLAGS="$CPPFLAGS -D__DARWIN__" ],
                 [*-*-linux*],
                 [ SYS_GL_LIBS="-lGL -lpthread" ],

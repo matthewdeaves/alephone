@@ -14,8 +14,19 @@ every Mac from a G3 running Tiger to a 2019 Intel Mac Pro.
 | `i386`   | 10.4.4  | 2006 Core Duo/Solo → 10.14 Mojave                    |
 | `x86_64` | 10.5+   | Core 2 Duo → current macOS on Intel                  |
 
+Added, 2026-08-31 (alephone#17): **arm64**, as a fourth slice alongside the
+three below. Unlike ppc/i386/x86_64, arm64 carries none of this project's
+legacy-toolchain or big-endian constraints, so it deliberately tracks
+upstream's current engine and current dependency versions instead of the
+pinned ones the table above documents. Built natively on the fleet's one
+Apple Silicon Mac (`scripts/build-arm64.sh`, run on `workstation` per
+`old-mac-build-host` docs/apple-silicon-arm64.md), never cross-compiled.
+Fused into the same universal binary as the other three by `scripts/build.sh
+fat`, as an OPTIONAL slice — a fat build produced anywhere other than
+`workstation` still succeeds with just ppc+x86_64, matching how every other
+port in this fleet already treats its own arm64 slice.
+
 Deliberately excluded:
-- **arm64** — already supported upstream, explicitly out of scope.
 - **ppc64** — a G5 runs the `ppc` slice at full speed; adds a slice and a test
   target for no user-visible gain.
 - **ppc7400** (AltiVec) — optional *later* as a 4th slice for G4/G5 speed. The

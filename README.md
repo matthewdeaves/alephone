@@ -2,8 +2,8 @@
 
 A fork of [Aleph One](https://github.com/Aleph-One-Marathon/alephone), the open-source
 engine that plays Bungie's *Marathon*, *Marathon 2*, and *Marathon Infinity*. This fork
-ports the current engine to run as **one fat binary** on real vintage Macs, from a
-PowerPC G3 running Mac OS X 10.3.9 up to a 2019 Intel Mac — not just modern arm64/x86_64.
+ports the current engine to run as **one fat binary** spanning a PowerPC G3 running
+Mac OS X 10.3.9 all the way up to a current Apple Silicon Mac.
 
 ## Runs on
 
@@ -12,18 +12,25 @@ PowerPC G3 running Mac OS X 10.3.9 up to a 2019 Intel Mac — not just modern ar
 | `ppc`    | 10.3.9     | G3 / G4 / G5 (no AltiVec assumed)          |
 | `i386`   | 10.4.4     | Early Intel Macs (Core Duo/Solo) → 10.14   |
 | `x86_64` | 10.5+      | Core 2 Duo and later, current macOS        |
+| `arm64`  | 11.0+      | Apple Silicon (M1 and later), current macOS |
 
-One universal binary, one download, all three architectures — matching what Aleph One
-itself shipped from 2011–2015 before that build was dropped for unrelated reasons (see
-`PORTING-PPC.md`).
+One universal binary, one download, all four architectures. The `ppc`/`i386`/`x86_64`
+trio matches what Aleph One itself shipped from 2011–2015 before that build was dropped
+for unrelated reasons (see `PORTING-PPC.md`); `arm64` is new here. Unlike the other
+three, it isn't legacy-constrained — it's built natively and tracks the engine's
+current dependency versions rather than the old pins the other slices need.
 
 ## What's different from upstream
 
-- Fat `ppc`/`i386`/`x86_64` build, cross-compiled with a pinned GCC 14 → PowerPC
-  toolchain (upstream targets arm64/x86_64 only).
-- Real hardware-accelerated OpenGL on every supported Mac, G3 and up — including
-  GPUs with no shader support at all, and GPUs whose driver falsely claims shader
-  support it can't actually run in hardware. No software-rendering fallback.
+- Fat `ppc`/`i386`/`x86_64`/`arm64` build in one binary (upstream ships arm64/x86_64
+  as separate downloads, no PowerPC or 32-bit Intel at all). `ppc`/`i386`/`x86_64`
+  cross-compile with a pinned GCC 14 → PowerPC toolchain; `arm64` builds natively.
+- Real hardware-accelerated OpenGL by default on every supported Mac, G3 and up —
+  including GPUs with no shader support at all (falls back to the classic
+  fixed-function GL path, still on the GPU) and GPUs whose driver falsely claims
+  shader support it can't actually run in hardware. A software renderer is still
+  available as a manual option (Preferences → Graphics) or automatic last-resort
+  fallback if OpenGL context creation fails outright, same as upstream.
 - Host or join a network game through your own private dedicated server, not just
   the official public server list — see `SERVER.md`.
 - Dependency versions pinned specifically for old-hardware correctness — e.g. boost

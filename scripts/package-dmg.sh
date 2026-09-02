@@ -237,17 +237,24 @@ EOF
 #
 # Ship the actual fix as something a non-technical person can run: a
 # double-clickable .command file (Finder runs these in Terminal) next to the
-# game folder, wrapping the same clear-launch-quarantine.sh primitive this
-# script already uses for its own defense-in-depth strip below.
-if [ -x "$REPO_ROOT/scripts/clear-launch-quarantine.sh" ]; then
-	cp "$REPO_ROOT/scripts/clear-launch-quarantine.sh" "$STAGE_DIR/.clear-launch-quarantine.sh"
-	chmod +x "$STAGE_DIR/.clear-launch-quarantine.sh"
-	cat > "$STAGE_DIR/Fix Launch Problems.command" << 'FIXEOF'
+# game folder.
+#
+# Self-contained, NOT a wrapper around a sidecar copy of
+# clear-launch-quarantine.sh: a first attempt shipped that primitive as a
+# hidden ".clear-launch-quarantine.sh" file next to this script. Finder
+# hides dotfiles by default, so a real user's drag of the *visible* DMG
+# items (the "Aleph One" folder, this .command, the README) never brought
+# the hidden helper along -- the script had nothing to call and failed with
+# "No such file or directory" (measured live 2026-09-02, imac-2019, a real
+# user's real drag-and-drop). Inlining the logic removes that failure mode
+# entirely: one visible file, nothing else has to survive the drag.
+cat > "$STAGE_DIR/Fix Launch Problems.command" << 'FIXEOF'
 #!/bin/sh
 # Fix Launch Problems.command - clears the macOS "downloaded from the
 # internet" flag that can make Aleph One.app launch cut off from its own
 # data files (see the README's "If Aleph One.app shows an error" section).
 # Safe to run more than once; does nothing if there is nothing to fix.
+# Self-contained on purpose -- see package-dmg.sh for why.
 set -eu
 cd "$(dirname "$0")"
 echo "Fixing Aleph One's launch flags..."
@@ -255,19 +262,56 @@ echo
 if [ ! -d "Aleph One" ]; then
 	echo "Couldn't find the 'Aleph One' folder next to this script."
 	echo "Keep this file in the same folder as 'Aleph One' and try again."
-else
-	./.clear-launch-quarantine.sh "Aleph One"
 	echo
-	echo "Done. Close this window, then double-click Aleph One.app again."
+	printf 'Press Return to close this window...'
+	read -r _
+	exit 1
 fi
+
+TARGET="Aleph One"
+
+# Presence check trusted only via -l's printed output (see
+# clear-launch-quarantine.sh): xattr's own exit codes lie about presence on
+# more than one xattr build encountered on this fleet.
+has_quarantine() { xattr -l "$1" 2>/dev/null | grep -q '^com\.apple\.quarantine:'; }
+
+had_flag=0
+find "$TARGET" 2>/dev/null | while IFS= read -r f; do
+	has_quarantine "$f" && echo found
+done | grep -q found && had_flag=1
+
+# Fast recursive form first (modern xattr); fall back to a manual walk with
+# non-recursive -d per file for older xattr builds (no -r flag at all on
+# some OS versions still in the fleet) that would otherwise just print
+# usage and do nothing.
+xattr -dr com.apple.quarantine "$TARGET" >/dev/null 2>&1 || true
+find "$TARGET" 2>/dev/null | while IFS= read -r f; do
+	xattr -d com.apple.quarantine "$f" >/dev/null 2>&1 || true
+done
+
+if [ "$had_flag" = 1 ]; then
+	echo "Cleared the download flag."
+else
+	echo "Nothing to fix -- no download flag was set."
+fi
+
+# Force LaunchServices to re-register the app: a stale registration can
+# make Finder open the wrong copy, independent of the quarantine flag.
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+if [ -x "$LSREGISTER" ]; then
+	find "$TARGET" -maxdepth 4 -iname "*.app" -print 2>/dev/null | while IFS= read -r a; do
+		[ -n "$a" ] || continue
+		"$LSREGISTER" -f "$a" >/dev/null 2>&1 || true
+	done
+fi
+
+echo
+echo "Done. Close this window, then double-click Aleph One.app again."
 echo
 printf 'Press Return to close this window...'
 read -r _
 FIXEOF
-	chmod +x "$STAGE_DIR/Fix Launch Problems.command"
-else
-	echo "WARNING: scripts/clear-launch-quarantine.sh missing, DMG will not carry a fix-it script" >&2
-fi
+chmod +x "$STAGE_DIR/Fix Launch Problems.command"
 
 # Defense in depth: strip quarantine from the whole staged tree (scenario
 # data was rsync'd from /tmp, which may itself have picked up the attribute).

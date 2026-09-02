@@ -374,3 +374,33 @@ Newest first.
   behaviorally identical everywhere `-drain` also worked). Rebuilt the ppc
   slice's SDL2 against the fix and reverified on the same real G3: process
   reaches the scenario chooser and plays correctly, no new crash report.
+
+- **App Translocation on a fresh DMG download (alephone#21, 2026-09-02):
+  a real "latest DMG" download-and-run on imac-2019 hit "Please be sure the
+  files 'Map', 'Shapes', 'Images' and 'Sounds' are correctly installed and
+  try again. (error -1)"** — not a Desktop-vs-Applications location issue,
+  and not a ScenarioChooser/MML filename bug (both were suspected and ruled
+  out by reading the actual crash log and the actual running process's
+  path). Root cause: `Aleph One.app` still carried `com.apple.quarantine`
+  from the download, so macOS launched it via App Translocation — a hidden
+  read-only copy under `/private/var/folders/.../AppTranslocation/<uuid>/d/`
+  isolated from its sibling data files. `get_data_path(kPathDefaultData)`
+  (`Source_Files/CSeries/cspaths_darwin.cpp`) derives the data directory from
+  the bundle's parent via `CFBundleCopyBundleURL()`, which breaks under
+  translocation; `kPathBundleData` would have survived it, but the
+  ScenarioChooser's own discovery path doesn't use it. Fixed in
+  `scripts/package-dmg.sh` (three iterations, all real bugs caught by
+  testing an actual drag-and-drop on imac-2019, not just reasoning about it):
+  first pass (`db8549f0`) shipped a `Fix Launch Problems.command` that called
+  a hidden `.clear-launch-quarantine.sh` sidecar — Finder drag never includes
+  hidden dotfiles, so a real user's copy silently lost the file the script
+  depended on ("no such file or directory"). Second pass (`b2fe710f`) inlined
+  the quarantine-clear + `lsregister -f` logic directly into the one visible
+  `.command` file. Third pass (`94d9dc20`) moved that file from the DMG root
+  into the `Aleph One` folder itself, next to `Aleph One.app`, so it survives
+  a single-folder drag instead of being left behind at the DMG root. Shipped
+  as `release-20260902-fat-5`, deployed and smoke-tested for real on
+  imac-2019 (not just packaged) — quarantine cleared, app launched. One
+  still-open, unresolved detail from that same test: the app needed two
+  launch attempts after running the fix script before it actually opened;
+  not yet root-caused.

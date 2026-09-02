@@ -205,10 +205,69 @@ Aleph One — Marathon 1, 2, & Infinity for Mac OS X
 Universal Fat Binary spanning PowerPC (10.3.9 Panther / 10.4 Tiger / 10.5 Leopard) and Intel (10.4 through 10.7+).
 
 Running the games:
+  - Drag the "Aleph One" folder to your Desktop or Applications folder.
   - Double-click Aleph One.app. A scenario picker shows Marathon, Marathon 2,
     and Marathon Infinity -- pick one to play. Each remembers its own saved
     games and preferences separately.
+
+If Aleph One.app shows an error about 'Map', 'Shapes', 'Images' and
+'Sounds', or does nothing at all when double-clicked:
+  - Double-click "Fix Launch Problems.command" (next to this README), once.
+    It opens a Terminal window, fixes the download flag macOS puts on
+    software from the internet, and closes when done. Then try
+    Aleph One.app again.
+  - This only needs running once per copy of the game.
 EOF
+
+# alephone#5 (real fleet finding, 2026-09-02): package-dmg.sh's own
+# quarantine strip below only clears the STAGED files before hdiutil builds
+# the DMG. It does nothing for a real user's actual download flow: Safari
+# quarantines the .dmg itself, and macOS re-applies com.apple.quarantine to
+# copies Finder drags out of a quarantined disk image, independent of
+# whatever the files inside carried when the DMG was built. A quarantined
+# Aleph One.app then gets silently App-Translocated at launch -- run from a
+# hidden read-only /private/var/.../AppTranslocation copy that has none of
+# its sibling data files (Map.scen, Scripts/, Scenarios/) next to it, which
+# LaunchServices can't tell apart from "person double-clicked the wrong
+# thing" (Reproduced live on imac-2019/Sequoia against a real Safari
+# download: process ran from AppTranslocation, hit
+# 'Please be sure the files ... are correctly installed' every launch until
+# quarantine was cleared and LaunchServices re-registered -- confirmed fixed
+# on the same real machine.)
+#
+# Ship the actual fix as something a non-technical person can run: a
+# double-clickable .command file (Finder runs these in Terminal) next to the
+# game folder, wrapping the same clear-launch-quarantine.sh primitive this
+# script already uses for its own defense-in-depth strip below.
+if [ -x "$REPO_ROOT/scripts/clear-launch-quarantine.sh" ]; then
+	cp "$REPO_ROOT/scripts/clear-launch-quarantine.sh" "$STAGE_DIR/.clear-launch-quarantine.sh"
+	chmod +x "$STAGE_DIR/.clear-launch-quarantine.sh"
+	cat > "$STAGE_DIR/Fix Launch Problems.command" << 'FIXEOF'
+#!/bin/sh
+# Fix Launch Problems.command - clears the macOS "downloaded from the
+# internet" flag that can make Aleph One.app launch cut off from its own
+# data files (see the README's "If Aleph One.app shows an error" section).
+# Safe to run more than once; does nothing if there is nothing to fix.
+set -eu
+cd "$(dirname "$0")"
+echo "Fixing Aleph One's launch flags..."
+echo
+if [ ! -d "Aleph One" ]; then
+	echo "Couldn't find the 'Aleph One' folder next to this script."
+	echo "Keep this file in the same folder as 'Aleph One' and try again."
+else
+	./.clear-launch-quarantine.sh "Aleph One"
+	echo
+	echo "Done. Close this window, then double-click Aleph One.app again."
+fi
+echo
+printf 'Press Return to close this window...'
+read -r _
+FIXEOF
+	chmod +x "$STAGE_DIR/Fix Launch Problems.command"
+else
+	echo "WARNING: scripts/clear-launch-quarantine.sh missing, DMG will not carry a fix-it script" >&2
+fi
 
 # Defense in depth: strip quarantine from the whole staged tree (scenario
 # data was rsync'd from /tmp, which may itself have picked up the attribute).

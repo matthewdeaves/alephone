@@ -212,8 +212,8 @@ Running the games:
 
 If Aleph One.app shows an error about 'Map', 'Shapes', 'Images' and
 'Sounds', or does nothing at all when double-clicked:
-  - Double-click "Fix Launch Problems.command" (next to this README), once.
-    It opens a Terminal window, fixes the download flag macOS puts on
+  - Open the "Aleph One" folder and double-click "Fix Launch Problems.command"
+    once. It opens a Terminal window, fixes the download flag macOS puts on
     software from the internet, and closes when done. Then try
     Aleph One.app again.
   - This only needs running once per copy of the game.
@@ -236,39 +236,46 @@ EOF
 # on the same real machine.)
 #
 # Ship the actual fix as something a non-technical person can run: a
-# double-clickable .command file (Finder runs these in Terminal) next to the
-# game folder.
+# double-clickable .command file (Finder runs these in Terminal) INSIDE the
+# "Aleph One" folder itself, next to Aleph One.app -- not as a DMG-root
+# sibling of that folder (user, 2026-09-02: "the command to fix the game
+# should live in the same location as the fat binary"). A DMG-root sibling
+# only travels along if the user separately drags it too; most people just
+# drag the one game folder they came for. Living inside that folder means
+# a single-folder drag always brings it along.
 #
 # Self-contained, NOT a wrapper around a sidecar copy of
 # clear-launch-quarantine.sh: a first attempt shipped that primitive as a
 # hidden ".clear-launch-quarantine.sh" file next to this script. Finder
 # hides dotfiles by default, so a real user's drag of the *visible* DMG
-# items (the "Aleph One" folder, this .command, the README) never brought
-# the hidden helper along -- the script had nothing to call and failed with
-# "No such file or directory" (measured live 2026-09-02, imac-2019, a real
-# user's real drag-and-drop). Inlining the logic removes that failure mode
-# entirely: one visible file, nothing else has to survive the drag.
-cat > "$STAGE_DIR/Fix Launch Problems.command" << 'FIXEOF'
+# items never brought the hidden helper along -- the script had nothing to
+# call and failed with "No such file or directory" (measured live
+# 2026-09-02, imac-2019, a real user's real drag-and-drop). Inlining the
+# logic removes that failure mode entirely: one visible file, nothing else
+# has to survive the drag.
+cat > "$STAGE_DIR/Aleph One/Fix Launch Problems.command" << 'FIXEOF'
 #!/bin/sh
 # Fix Launch Problems.command - clears the macOS "downloaded from the
 # internet" flag that can make Aleph One.app launch cut off from its own
 # data files (see the README's "If Aleph One.app shows an error" section).
 # Safe to run more than once; does nothing if there is nothing to fix.
-# Self-contained on purpose -- see package-dmg.sh for why.
+# Self-contained on purpose -- see package-dmg.sh for why. Lives INSIDE the
+# "Aleph One" folder (next to Aleph One.app), not beside it, so a
+# single-folder drag always brings it along -- see package-dmg.sh for why.
 set -eu
 cd "$(dirname "$0")"
 echo "Fixing Aleph One's launch flags..."
 echo
-if [ ! -d "Aleph One" ]; then
-	echo "Couldn't find the 'Aleph One' folder next to this script."
-	echo "Keep this file in the same folder as 'Aleph One' and try again."
+if [ ! -e "Aleph One.app" ]; then
+	echo "Couldn't find Aleph One.app next to this script."
+	echo "Keep this file inside the 'Aleph One' folder and try again."
 	echo
 	printf 'Press Return to close this window...'
 	read -r _
 	exit 1
 fi
 
-TARGET="Aleph One"
+TARGET="."
 
 # Presence check trusted only via -l's printed output (see
 # clear-launch-quarantine.sh): xattr's own exit codes lie about presence on
@@ -311,7 +318,7 @@ echo
 printf 'Press Return to close this window...'
 read -r _
 FIXEOF
-chmod +x "$STAGE_DIR/Fix Launch Problems.command"
+chmod +x "$STAGE_DIR/Aleph One/Fix Launch Problems.command"
 
 # Defense in depth: strip quarantine from the whole staged tree (scenario
 # data was rsync'd from /tmp, which may itself have picked up the attribute).

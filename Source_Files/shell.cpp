@@ -86,6 +86,11 @@
 #include <unistd.h>
 #endif
 
+#if (defined(__APPLE__) && defined(__MACH__)) && defined(HAVE_SYSCTLBYNAME)
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#endif
+
 #include "OGL_Headers.h"
 
 #ifdef HAVE_SDL_IMAGE
@@ -1356,6 +1361,27 @@ static void process_game_key(const SDL_Event &event)
 	}
 }
 
+#if (defined(__APPLE__) && defined(__MACH__))
+// The SDL_WINDOWEVENT_FOCUS_GAINED workaround below exists only for a
+// Mojave-era focus bug. On pre-Mojave AppKit (measured on Tiger 10.4.11,
+// alephone#24) the redundant SDL_SetWindowFullscreen() toggle it performs
+// traps inside -[NSWindow _setFrameCommon:display:stashSize:], crashing at
+// startup. Gate it to the OS it was written for.
+static bool running_on_macos_mojave_or_later()
+{
+#ifdef HAVE_SYSCTLBYNAME
+	char release[32];
+	size_t size = sizeof(release);
+	// kern.osrelease major version 18 == Darwin 18 == macOS 10.14 Mojave
+	if (sysctlbyname("kern.osrelease", release, &size, NULL, 0) == 0)
+		return atoi(release) >= 18;
+#endif
+	// can't determine the OS version: assume modern, since that is the
+	// platform this workaround was written for and has always run on
+	return true;
+}
+#endif
+
 static void process_event(const SDL_Event &event)
 {
 	switch (event.type) {
@@ -1459,19 +1485,22 @@ static void process_event(const SDL_Event &event)
 				break;
 			case SDL_WINDOWEVENT_FOCUS_GAINED:
 #if (defined(__APPLE__) && defined(__MACH__))
-    			// work around Mojave issue
+    			// work around Mojave issue (alephone#24: gate to Mojave+,
+				// see running_on_macos_mojave_or_later() above)
 				static bool gFirstWindow = true;
 				if (gFirstWindow) {
 					gFirstWindow = false;
-					SDL_Window *win = SDL_GetWindowFromID(event.window.windowID);
-					if (!MainScreenIsOpenGL() && (SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN_DESKTOP)) {
-						SDL_SetWindowFullscreen(win, 0);
-						SDL_SetWindowFullscreen(win, SDL_WINDOW_FULLSCREEN_DESKTOP);
-					} else {
-						SDL_Window *w2 = SDL_CreateWindow("Loading", 0, 0, 100, 100, 0);
-						SDL_RaiseWindow(w2);
-						SDL_RaiseWindow(win);
-						SDL_DestroyWindow(w2);
+					if (running_on_macos_mojave_or_later()) {
+						SDL_Window *win = SDL_GetWindowFromID(event.window.windowID);
+						if (!MainScreenIsOpenGL() && (SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN_DESKTOP)) {
+							SDL_SetWindowFullscreen(win, 0);
+							SDL_SetWindowFullscreen(win, SDL_WINDOW_FULLSCREEN_DESKTOP);
+						} else {
+							SDL_Window *w2 = SDL_CreateWindow("Loading", 0, 0, 100, 100, 0);
+							SDL_RaiseWindow(w2);
+							SDL_RaiseWindow(win);
+							SDL_DestroyWindow(w2);
+						}
 					}
 				}
 #endif

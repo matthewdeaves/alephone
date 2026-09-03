@@ -404,3 +404,29 @@ Newest first.
   still-open, unresolved detail from that same test: the app needed two
   launch attempts after running the fix script before it actually opened;
   not yet root-caused.
+
+- **`EXC_BREAKPOINT` in `NSWindow setContentSize`/`Cocoa_SetWindowFullscreen`
+  at startup on a real mini-g4 (Tiger 10.4.11), `--nogl` (alephone#24,
+  2026-09-03).** `Source_Files/shell.cpp`'s `SDL_WINDOWEVENT_FOCUS_GAINED`
+  handler carries a first-window workaround, commented "work around Mojave
+  issue," that toggles `SDL_SetWindowFullscreen()` off then back on. It ran
+  unconditionally on every `__APPLE__` build regardless of macOS version.
+  On Tiger's ancient AppKit that redundant toggle traps inside
+  `-[NSWindow _setFrameCommon:display:stashSize:]` — an Objective-C runtime
+  assertion, not a GCC14 codegen bug (this is a call into Apple's own
+  AppKit, confirmed from the crash-reporter stack). The on-disk preference
+  (`scmode_fullscreen="false"`) predated the crash, ruling out the
+  stale-preference theory the issue itself raised. Fix: gate the whole
+  first-window workaround behind a runtime OS-version check
+  (`sysctlbyname("kern.osrelease")`, Darwin major ≥ 18 == macOS 10.14
+  Mojave+) instead of assuming modern AppKit on every Apple target — the
+  workaround was always meant for Mojave only, per its own comment.
+  Verified on real mini-g4 hardware: rebuilt just the ppc slice, `lipo`'d
+  it into the existing fat test binary already deployed there, ran the
+  exact repro (`--nogl` + scenario-directory positional arg) that crashed
+  within ~1s in the original report — process stayed alive and running 25+
+  seconds past that window with no new crash-reporter entry, then quit
+  cleanly on `SIGTERM`. (A first repro run was mistakenly left running in
+  the background past its `ssh` session and had to be killed separately —
+  not related to the fix itself, just a test-methodology slip while
+  verifying it.)

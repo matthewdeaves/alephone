@@ -217,6 +217,9 @@ If Aleph One.app shows an error about 'Map', 'Shapes', 'Images' and
     software from the internet, and closes when done. Then try
     Aleph One.app again.
   - This only needs running once per copy of the game.
+  - Only needed on OS X 10.7 (Lion) or later -- older Macs (Panther, Tiger,
+    Leopard, Snow Leopard) don't have this download-flag feature at all, so
+    Aleph One.app should just launch directly there.
 EOF
 
 # alephone#5 (real fleet finding, 2026-09-02): package-dmg.sh's own
@@ -262,8 +265,40 @@ cat > "$STAGE_DIR/Aleph One/Fix Launch Problems.command" << 'FIXEOF'
 # Self-contained on purpose -- see package-dmg.sh for why. Lives INSIDE the
 # "Aleph One" folder (next to Aleph One.app), not beside it, so a
 # single-folder drag always brings it along -- see package-dmg.sh for why.
+#
+# User request 2026-09-03: don't just silently no-op the xattr/lsregister
+# steps on a Mac that never had this problem in the first place -- Gatekeeper
+# and the download-quarantine flag this fixes don't exist before OS X 10.7
+# Lion, which covers every real PPC target this port ships (10.3.9-10.5) plus
+# Snow Leopard Intel machines. Check the OS up front and say so explicitly
+# instead of running through motions that happen to do nothing.
 set -eu
 cd "$(dirname "$0")"
+
+OS_VERSION="$(sw_vers -productVersion 2>/dev/null || echo 0.0)"
+OS_MAJOR="$(echo "$OS_VERSION" | cut -d. -f1)"
+OS_MINOR="$(echo "$OS_VERSION" | cut -d. -f2)"
+case "$OS_MAJOR" in ''|*[!0-9]*) OS_MAJOR=0 ;; esac
+case "$OS_MINOR" in ''|*[!0-9]*) OS_MINOR=0 ;; esac
+HAS_GATEKEEPER=0
+if [ "$OS_MAJOR" -gt 10 ]; then
+	HAS_GATEKEEPER=1
+elif [ "$OS_MAJOR" -eq 10 ] && [ "$OS_MINOR" -ge 7 ]; then
+	HAS_GATEKEEPER=1
+fi
+if [ "$HAS_GATEKEEPER" = 0 ]; then
+	echo "This Mac is running macOS $OS_VERSION."
+	echo "Gatekeeper and the download-flag feature this tool clears were"
+	echo "introduced in OS X 10.7 (Lion) -- this Mac doesn't have them, so"
+	echo "there's nothing here for this tool to fix."
+	echo
+	echo "Just double-click Aleph One.app directly."
+	echo
+	printf 'Press Return to close this window...'
+	read -r _
+	exit 0
+fi
+
 echo "Fixing Aleph One's launch flags..."
 echo
 if [ ! -e "Aleph One.app" ]; then

@@ -1274,6 +1274,12 @@ void toggle_fullscreen(bool fs)
 		  change_screen_mode(&screen_mode, true);
 		  clear_screen();
 		}
+		// alephone#25: this live toggle (Cmd+Return) only ever updated the
+		// runtime screen_mode above, never graphics_preferences, so the
+		// choice was lost on next launch -- persist it like the F1/F2/F3
+		// screen-mode hotkeys already do.
+		graphics_preferences->screen_mode.fullscreen = fs;
+		write_preferences();
 	}
 }
 

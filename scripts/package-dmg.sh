@@ -19,10 +19,6 @@ DIST_DIR="$REPO_ROOT/dist"
 STAGE_DIR="$REPO_ROOT/dist/staging-dmg"
 DMG_NAME="Marathon-OldMac-${VERSION}.dmg"
 
-mkdir -p "$DIST_DIR" "$STAGE_DIR"
-rm -rf "$STAGE_DIR"
-mkdir -p "$STAGE_DIR/Aleph One/Scenarios"
-
 # Local PPC staging must be reproducible from this checkout.  Historic
 # build-host jobs unpacked the three scenario submodules under /tmp, but that
 # location is not a repository input and is commonly absent on a clean
@@ -39,6 +35,13 @@ done
 [ -f "$MARATHON_DATA/Map.scen" ] || { echo "package-dmg.sh: Marathon Map.scen missing from $MARATHON_DATA" >&2; exit 1; }
 [ -f "$MARATHON_2_DATA/Map.sceA" ] || { echo "package-dmg.sh: Marathon 2 Map.sceA missing from $MARATHON_2_DATA" >&2; exit 1; }
 [ -f "$MARATHON_INFINITY_DATA/Map.sceA" ] || { echo "package-dmg.sh: Marathon Infinity Map.sceA missing from $MARATHON_INFINITY_DATA" >&2; exit 1; }
+
+# Do not destroy a previous staging tree until every required scenario input
+# has passed validation.  A bad override must leave the last inspectable
+# candidate intact for diagnosis or rollback.
+mkdir -p "$DIST_DIR" "$STAGE_DIR"
+rm -rf "$STAGE_DIR"
+mkdir -p "$STAGE_DIR/Aleph One/Scenarios"
 
 # Ensure binary exists.  A caller staging one architecture for validation may
 # select it explicitly; otherwise retain the historic fat-then-PPC fallback.

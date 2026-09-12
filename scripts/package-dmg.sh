@@ -23,12 +23,40 @@ mkdir -p "$DIST_DIR" "$STAGE_DIR"
 rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR/Aleph One/Scenarios"
 
-# Ensure binary exists (use fat binary if available, else PPC binary)
-BIN_SRC="$REPO_ROOT/build/alephone"
-if [ ! -f "$BIN_SRC" ]; then
+# Local PPC staging must be reproducible from this checkout.  Historic
+# build-host jobs unpacked the three scenario submodules under /tmp, but that
+# location is not a repository input and is commonly absent on a clean
+# workstation.  Keep it as an explicit override for those jobs while using
+# the checked-out submodules by default.
+MARATHON_DATA="${ALEPHONE_MARATHON_DATA:-$REPO_ROOT/data/Scenarios/Marathon}"
+MARATHON_2_DATA="${ALEPHONE_MARATHON_2_DATA:-$REPO_ROOT/data/Scenarios/Marathon 2}"
+MARATHON_INFINITY_DATA="${ALEPHONE_MARATHON_INFINITY_DATA:-$REPO_ROOT/data/Scenarios/Marathon Infinity}"
+
+for scenario in "$MARATHON_DATA" "$MARATHON_2_DATA" "$MARATHON_INFINITY_DATA"; do
+	[ -d "$scenario" ] || { echo "package-dmg.sh: scenario directory missing: $scenario" >&2; exit 1; }
+done
+
+[ -f "$MARATHON_DATA/Map.scen" ] || { echo "package-dmg.sh: Marathon Map.scen missing from $MARATHON_DATA" >&2; exit 1; }
+[ -f "$MARATHON_2_DATA/Map.sceA" ] || { echo "package-dmg.sh: Marathon 2 Map.sceA missing from $MARATHON_2_DATA" >&2; exit 1; }
+[ -f "$MARATHON_INFINITY_DATA/Map.sceA" ] || { echo "package-dmg.sh: Marathon Infinity Map.sceA missing from $MARATHON_INFINITY_DATA" >&2; exit 1; }
+
+# Ensure binary exists.  A caller staging one architecture for validation may
+# select it explicitly; otherwise retain the historic fat-then-PPC fallback.
+BIN_SRC="${ALEPHONE_BINARY:-$REPO_ROOT/build/alephone}"
+if [ ! -f "$BIN_SRC" ] && [ -z "${ALEPHONE_BINARY:-}" ]; then
 	BIN_SRC="$REPO_ROOT/build/alephone-ppc"
 fi
 [ -f "$BIN_SRC" ] || { echo "package-dmg.sh: no binary found in build/"; exit 1; }
+BIN_ARCHS="$(lipo -archs "$BIN_SRC" 2>/dev/null || true)"
+case "$BIN_ARCHS" in
+	*ppc*) BIN_HAS_PPC=1 ;;
+	*) BIN_HAS_PPC=0 ;;
+esac
+if otool -L "$BIN_SRC" | grep -q 'libSDL2-2.0.0.dylib'; then
+	BIN_NEEDS_SDL2=1
+else
+	BIN_NEEDS_SDL2=0
+fi
 
 echo "================================================================"
 echo "Packaging Marathon Games for Mac OS X (Panther/Tiger/Leopard/Lion)"
@@ -126,7 +154,9 @@ EOF
 	# copy for a ppc+x86_64-only build (no arm64 slice built this run).
 	SDL2_DYLIB="$REPO_ROOT/build/deps-fat/libSDL2-2.0.0.dylib"
 	[ -f "$SDL2_DYLIB" ] || SDL2_DYLIB="$REPO_ROOT/build/deps-x86_64/libSDL2-2.0.0.dylib"
-	if [ -f "$SDL2_DYLIB" ]; then
+	if [ "$BIN_NEEDS_SDL2" = 0 ]; then
+		echo "[package] $BIN_SRC has no SDL2 dylib dependency; no Frameworks copy needed"
+	elif [ -f "$SDL2_DYLIB" ]; then
 		mkdir -p "$APP_DIR/Contents/Frameworks"
 		cp "$SDL2_DYLIB" "$APP_DIR/Contents/Frameworks/libSDL2-2.0.0.dylib"
 		chmod +w "$APP_DIR/Contents/Frameworks/libSDL2-2.0.0.dylib"
@@ -167,7 +197,13 @@ EOF
 	# notarization check, but it fixes the false-corruption failure mode.
 	# lipo'd ppc/x86_64 fat binaries: codesign signs each slice independently,
 	# so this must run after the binary is final, not before lipo.
-	if codesign --force --deep -s - "$APP_DIR" 2>/tmp/codesign-${GAME_NAME// /_}.log; then
+	# PPC-era systems do not need Gatekeeper support and the legacy port must
+	# keep the executable unsigned: signing mutates the exact PPC candidate by
+	# adding LC_CODE_SIGNATURE.  Modern-only bundles retain the old signing
+	# path.
+	if [ "$BIN_HAS_PPC" = 1 ]; then
+		echo "[package] PPC slice present; leaving legacy app bundle unsigned"
+	elif codesign --force --deep -s - "$APP_DIR" 2>/tmp/codesign-${GAME_NAME// /_}.log; then
 		codesign --verify --verbose=2 "$APP_DIR" 2>&1 | sed 's/^/  [codesign] /'
 	else
 		echo "WARNING: ad-hoc codesign failed for $APP_DIR, see /tmp/codesign-${GAME_NAME// /_}.log" >&2
@@ -194,10 +230,10 @@ create_app_bundle "Aleph One" \
 	"$REPO_ROOT/Xcode/App_Resources/AlephOne/Info.plist"
 # Primary scenario: siblings of the .app itself (matches add_primary_scenario
 # using kPathDefaultData, which resolves to the app's own containing folder).
-rsync -a --exclude='.git' /tmp/data-marathon/ "$STAGE_DIR/Aleph One/"
+rsync -a --exclude='.git' "$MARATHON_DATA/" "$STAGE_DIR/Aleph One/"
 # Everything else: one subdirectory per scenario under Scenarios/.
-rsync -a --exclude='.git' /tmp/data-marathon-2/ "$STAGE_DIR/Aleph One/Scenarios/Marathon 2/"
-rsync -a --exclude='.git' /tmp/data-marathon-infinity/ "$STAGE_DIR/Aleph One/Scenarios/Marathon Infinity/"
+rsync -a --exclude='.git' "$MARATHON_2_DATA/" "$STAGE_DIR/Aleph One/Scenarios/Marathon 2/"
+rsync -a --exclude='.git' "$MARATHON_INFINITY_DATA/" "$STAGE_DIR/Aleph One/Scenarios/Marathon Infinity/"
 
 # Add README
 cat > "$STAGE_DIR/README.txt" << 'EOF'

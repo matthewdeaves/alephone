@@ -174,6 +174,10 @@ REMOTE_BUILD
 		source_stamp_write "$REPO_ROOT/build/stamp-ppc" "$_stamp_ppc"
 		;;
 
+	i386)
+		exec "$REPO_ROOT/scripts/build-i386.sh"
+		;;
+
 	x86_64)
 		echo "[build] syncing source tree to $BUILD_HOST..."
 		ssh "$BUILD_HOST" 'mkdir -p ~/alephone-build-x86_64'

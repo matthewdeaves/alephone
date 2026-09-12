@@ -38,7 +38,7 @@ ssh "$HOST" bash -s -- "$(printf '%q' "$APP_NAME")" "$(printf '%q' "$OBSERVE_SEC
 set -u
 APP_NAME="$1"
 OBSERVE_SECS="$2"
-APP_PATH="$HOME/Desktop/${APP_NAME}/${APP_NAME}.app"
+APP_PATH="/Applications/${APP_NAME}/${APP_NAME}.app"
 
 # No pgrep on Tiger/Panther. `ps -Awww -o command=` forces unlimited command
 # width (plain `ps aux` truncates the COMMAND column even over a non-tty ssh

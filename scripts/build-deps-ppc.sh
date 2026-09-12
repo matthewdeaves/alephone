@@ -22,6 +22,8 @@ if [ -z "${BUILD_HOST:-}" ]; then
 fi
 trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/pick-build-host.sh" --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
 
+BUILD_HOST="$BUILD_HOST" "$REPO_ROOT/scripts/build-sdl2-ppc.sh"
+
 echo "[deps-ppc] syncing source archives to $BUILD_HOST..."
 ssh "$BUILD_HOST" 'mkdir -p ~/alephone-deps-src ~/alephone-ppc-deps'
 rsync -az "$REPO_ROOT/.deps/" "$BUILD_HOST:~/alephone-deps-src/"
@@ -52,8 +54,8 @@ else
 fi
 JOBS=2
 
-SDL_PREFIX=/Users/mini/oldmac/sdl2-ppc-tiger103
-[ -d "$SDL_PREFIX" ] || SDL_PREFIX=/Users/mini/oldmac/sdl2-ppc-panther
+SDL_PREFIX=/Users/mini/oldmac/alephone/sdl2-ppc-tiger103
+test -x "$SDL_PREFIX/bin/sdl2-config" && test -f "$SDL_PREFIX/lib/libSDL2.a"
 
 TAR=tar
 [ -x /Users/mini/local/bin/gtar ] && TAR=/Users/mini/local/bin/gtar

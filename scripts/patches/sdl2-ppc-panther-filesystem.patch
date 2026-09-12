@@ -1,0 +1,10 @@
+--- a/src/filesystem/cocoa/SDL_sysfilesystem.m
++++ b/src/filesystem/cocoa/SDL_sysfilesystem.m
+@@ -42,3 +42,7 @@
++#ifndef NSApplicationSupportDirectory
++#define NSApplicationSupportDirectory NSApplicationDirectory
++#endif
++
+ char *
+ SDL_GetBasePath_REAL(void)
+ {

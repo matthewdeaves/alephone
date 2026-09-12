@@ -30,6 +30,7 @@ mkdir -p "$REPO_ROOT/build"
 
 case "$TARGET" in
 	ppc)
+		BUILD_HOST="$BUILD_HOST" "$REPO_ROOT/scripts/build-sdl2-ppc.sh"
 		echo "[build] syncing source tree to $BUILD_HOST..."
 		ssh "$BUILD_HOST" 'mkdir -p ~/alephone-build-ppc'
 		rsync -az --delete $(source_stamp_rsync_excludes "$SOURCE_STAMP_EXCLUDES") \
@@ -68,8 +69,8 @@ else
 	echo "build.sh: no MacOSX10.3.9 SDK found (checked /Developer/SDKs and ~/SDKs)" >&2
 	exit 1
 fi
-SDL_DIR=/Users/mini/oldmac/sdl2-ppc-tiger103
-[ -d "$SDL_DIR" ] || SDL_DIR=/Users/mini/oldmac/sdl2-ppc-panther
+		SDL_DIR=/Users/mini/oldmac/alephone/sdl2-ppc-tiger103
+		test -x "$SDL_DIR/bin/sdl2-config" && test -f "$SDL_DIR/lib/libSDL2.a"
 
 # Ensure SDL2 headers accessible as <SDL2/SDL.h> and <SDL.h>
 ln -sf "$SDL_DIR/include/SDL2" "$DEPS/include/SDL2"

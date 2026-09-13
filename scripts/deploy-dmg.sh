@@ -76,6 +76,13 @@ for app in "$MOUNT"/*/*.app; do
 	# carries it -- this deploy path (scp) never sets it, but the DMG's
 	# staged content could, so clear it explicitly rather than assume.
 	ditto "$src" "$stage"
+	# Prune any backup(s) left by a PRIOR deploy run before making this run's:
+	# the fleet-wide rule is that rollback copies are pruned once the new
+	# install verifies, and by the time a later deploy runs, the previous
+	# one already has (a human or smoke-dmg.sh has had the chance to use
+	# it). Without this, every routine re-deploy leaves one more full copy
+	# on disk forever.
+	rm -rf "$DEPLOY_ROOT"/previous-"$name".* 2>/dev/null
 	if [ -e "$dest" ]; then
 		backup="$DEPLOY_ROOT/previous-${name}.$$"
 		mv "$dest" "$backup"
@@ -97,6 +104,8 @@ for app in "$MOUNT"/*.app; do
 	stage="$DEPLOY_ROOT/install-${name}.$$"
 	backup=""
 	ditto "$app" "$stage"
+	# See the matching comment in the sibling-data-folder loop above.
+	rm -rf "$DEPLOY_ROOT"/previous-"$name".* 2>/dev/null
 	if [ -e "$dest" ]; then
 		backup="$DEPLOY_ROOT/previous-${name}.$$"
 		mv "$dest" "$backup"

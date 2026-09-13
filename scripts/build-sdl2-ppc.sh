@@ -123,6 +123,12 @@ if [ -e "$FINAL" ]; then
 	mv "$FINAL" "$FINAL.previous.$(date +%s)"
 fi
 mv "$CANDIDATE" "$FINAL"
-rmdir "$STAGE$ROOT" "$STAGE$HOME/oldmac" "$STAGE$HOME" "$STAGE/Users" "$STAGE"
+# Best-effort cleanup only: the real work (promoting $FINAL above) has
+# already succeeded, so a leftover staging directory here (e.g. a stray file
+# from `make install`, or a remote $HOME that isn't exactly two path
+# segments) must not make set -e abort the script and report a false build
+# failure.
+rmdir "$STAGE$ROOT" "$STAGE$HOME/oldmac" "$STAGE$HOME" "$STAGE/Users" "$STAGE" 2>/dev/null \
+	|| echo "[sdl2-ppc] note: could not fully remove staging dir $STAGE (non-fatal, leftover may need manual cleanup)"
 echo "[sdl2-ppc] staged and promoted verified prefix: $FINAL"
 REMOTE_BUILD

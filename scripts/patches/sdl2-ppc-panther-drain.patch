@@ -1,0 +1,17 @@
+--- a/src/file/cocoa/SDL_rwopsbundlesupport.m
++++ b/src/file/cocoa/SDL_rwopsbundlesupport.m
+@@ -63,7 +63,12 @@ FILE* SDL_OpenFPFromBundleOrFallback(const char *file, const char *mode)
+         fp = fopen(file, mode);
+     }
+
+-    [autorelease_pool drain];
++    /* alephone#37: -drain is an NSAutoreleasePool method Apple added in
++     * Tiger (10.4) as a GC-friendly synonym for -release. Panther 10.3.9's
++     * Foundation does not implement it at all, so this unconditionally
++     * crashed (unrecognized selector -> forward:: -> NSException) on every
++     * launch, on the very first bundle-resource file this function opened.
++     * -release has always worked, on every OS version, GC or not. */
++    [autorelease_pool release];
+
+     return fp;
+ }

@@ -8,6 +8,7 @@ PATCH_FILE="$REPO_ROOT/scripts/patches/sdl2-ppc-g3-no-altivec.patch"
 VIDEO_PATCH_FILE="$REPO_ROOT/scripts/patches/sdl2-ppc-g3-cocoa-video-no-altivec.patch"
 DISPLAY_PATCH_FILE="$REPO_ROOT/scripts/patches/sdl2-ppc-panther-display-name.patch"
 FILESYSTEM_PATCH_FILE="$REPO_ROOT/scripts/patches/sdl2-ppc-panther-filesystem.patch"
+DRAIN_PATCH_FILE="$REPO_ROOT/scripts/patches/sdl2-ppc-panther-drain.patch"
 BUILD_HOST_CLAIMED=0
 
 if [ -z "${BUILD_HOST:-}" ]; then
@@ -25,7 +26,8 @@ scp -q "$PATCH_FILE" "$BUILD_HOST:/tmp/alephone-sdl2-ppc-g3-no-altivec.patch"
 scp -q "$VIDEO_PATCH_FILE" "$BUILD_HOST:/tmp/alephone-sdl2-ppc-g3-cocoa-video-no-altivec.patch"
 scp -q "$DISPLAY_PATCH_FILE" "$BUILD_HOST:/tmp/alephone-sdl2-ppc-panther-display-name.patch"
 scp -q "$FILESYSTEM_PATCH_FILE" "$BUILD_HOST:/tmp/alephone-sdl2-ppc-panther-filesystem.patch"
-ssh "$BUILD_HOST" 'bash -s' -- "$PIN" /tmp/alephone-sdl2-ppc-g3-no-altivec.patch /tmp/alephone-sdl2-ppc-g3-cocoa-video-no-altivec.patch /tmp/alephone-sdl2-ppc-panther-display-name.patch /tmp/alephone-sdl2-ppc-panther-filesystem.patch <<'REMOTE_BUILD'
+scp -q "$DRAIN_PATCH_FILE" "$BUILD_HOST:/tmp/alephone-sdl2-ppc-panther-drain.patch"
+ssh "$BUILD_HOST" 'bash -s' -- "$PIN" /tmp/alephone-sdl2-ppc-g3-no-altivec.patch /tmp/alephone-sdl2-ppc-g3-cocoa-video-no-altivec.patch /tmp/alephone-sdl2-ppc-panther-display-name.patch /tmp/alephone-sdl2-ppc-panther-filesystem.patch /tmp/alephone-sdl2-ppc-panther-drain.patch <<'REMOTE_BUILD'
 set -euo pipefail
 
 PIN="$1"
@@ -33,15 +35,16 @@ PATCH_FILE="$2"
 VIDEO_PATCH_FILE="$3"
 DISPLAY_PATCH_FILE="$4"
 FILESYSTEM_PATCH_FILE="$5"
+DRAIN_PATCH_FILE="$6"
 ROOT="$HOME/oldmac/alephone"
-SHARED="$HOME/oldmac/panther-sdl2"
+SHARED="$HOME/oldmac/vendor/panther-sdl2"
 SRC="$ROOT/panther-sdl2"
 BUILD="$ROOT/panther-sdl2-build.$$"
 FINAL="$ROOT/sdl2-ppc-tiger103"
 STAGE="$ROOT/.sdl-stage.$$"
 MARKER=.alephone-sdl2-ppc-provenance
-PATCH_DIGEST="$(cat "$PATCH_FILE" "$VIDEO_PATCH_FILE" "$DISPLAY_PATCH_FILE" "$FILESYSTEM_PATCH_FILE" | shasum -a 256 | awk '{print $1}')"
-EXPECTED="SDL2 2.0.3 pin=$PIN patch-sha256=$PATCH_DIGEST patches=g3-no-altivec,g3-cocoa-video-no-altivec,panther-display-name,panther-filesystem target=powerpc-apple-darwin8 cpu=generic-g3 flags=-arch,ppc,-mmacosx-version-min=10.3,--disable-altivec,--disable-joystick"
+PATCH_DIGEST="$(cat "$PATCH_FILE" "$VIDEO_PATCH_FILE" "$DISPLAY_PATCH_FILE" "$FILESYSTEM_PATCH_FILE" "$DRAIN_PATCH_FILE" | shasum -a 256 | awk '{print $1}')"
+EXPECTED="SDL2 2.0.3 pin=$PIN patch-sha256=$PATCH_DIGEST patches=g3-no-altivec,g3-cocoa-video-no-altivec,panther-display-name,panther-filesystem,panther-drain target=powerpc-apple-darwin8 cpu=generic-g3 flags=-arch,ppc,-mmacosx-version-min=10.3,--disable-altivec,--disable-joystick"
 CC="$HOME/gcc14-ppc/bin/powerpc-apple-darwin8-gcc"
 CXX="$HOME/gcc14-ppc/bin/powerpc-apple-darwin8-g++"
 OBJC="$HOME/gcc14-ppc-objc/bin/powerpc-apple-darwin8-gcc"
@@ -62,13 +65,23 @@ if [ -x "$FINAL/bin/sdl2-config" ] && [ -f "$FINAL/lib/libSDL2.a" ] && \
 	exit 0
 fi
 
-test "$(git -C "$SHARED" rev-parse HEAD)" = "$PIN"
+# Do not assert $SHARED's current HEAD matches our pin: it is a shared
+# mirror other ports (e.g. old-mac-halflife) also use and check out their
+# own commits into, so its live HEAD can legitimately be anything. Only
+# require that our pinned commit exists as an object there (a real clone
+# carries full history, not just the checked-out ref) and explicitly check
+# it out in our own private clone instead of trusting SHARED's HEAD.
+git -C "$SHARED" cat-file -e "$PIN" 2>/dev/null
 mkdir -p "$ROOT"
 if [ ! -d "$SRC/.git" ]; then
 	git clone "$SHARED" "$SRC"
 fi
+if ! git -C "$SRC" checkout --detach "$PIN" >/tmp/alephone-sdl2-ppc-checkout.log 2>&1; then
+	git -C "$SRC" fetch "$SHARED" "$PIN"
+	git -C "$SRC" checkout --detach "$PIN"
+fi
 test "$(git -C "$SRC" rev-parse HEAD)" = "$PIN"
-for patch in "$PATCH_FILE" "$VIDEO_PATCH_FILE" "$DISPLAY_PATCH_FILE"; do
+for patch in "$PATCH_FILE" "$VIDEO_PATCH_FILE" "$DISPLAY_PATCH_FILE" "$DRAIN_PATCH_FILE"; do
 	if git -C "$SRC" apply --recount --reverse --check "$patch" 2>/dev/null; then
 		echo "[sdl2-ppc] source patch already applied: $(basename "$patch")"
 	else

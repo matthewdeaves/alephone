@@ -201,7 +201,18 @@ touch -t 202001030000 configure config.h.in $(find . -name Makefile.in)
 
 DEPS=/Users/mini/alephone-intel-deps
 TOOLCHAIN=/Users/mini/gcc14-ppc-build/tools/gcc-7.5.0-host
-SDL_DIR=/Users/mini/oldmac/sdl2-x86_64
+# alephone#33/#31, manager 14:53: the old sdl2-x86_64 prefix is stock SDL2
+# 2.0.22 built at INTEL_MIN=10.7, so its libSDL2-2.0.0.dylib hard-references
+# an AppKit symbol (_NSBackingPropertyOldScaleFactorKey) that doesn't exist
+# on Snow Leopard -- dyld aborts at launch. sdl2-snow-x86_64 is the same
+# recipe/source built at INTEL_MIN=10.6 (old-mac-halflife's 10.6 slice
+# already links it and passes on mini-sl); at that floor the same symbol
+# becomes a weak import (verified: `nm -m` shows "weak external" there vs.
+# plain "external" on the 10.7 build) -- dyld tolerates it being absent
+# instead of aborting. No SDL source change, just the deployment-target
+# floor this prefix was built at. This makes 10.6 the new effective x86_64
+# floor (#31).
+SDL_DIR=/Users/mini/oldmac/sdl2-snow-x86_64
 
 # alephone#15: that GCC 7.5 bootstrap exists to build the PPC cross-toolchain
 # on Lion, not to compile application code, and doesn't run at all on modern

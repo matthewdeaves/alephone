@@ -1,10 +1,13 @@
 --- a/src/filesystem/cocoa/SDL_sysfilesystem.m
 +++ b/src/filesystem/cocoa/SDL_sysfilesystem.m
-@@ -42,3 +42,7 @@
+@@ -38,6 +38,10 @@
+ #include "SDL_stdinc.h"
+ #include "SDL_filesystem.h"
+
 +#ifndef NSApplicationSupportDirectory
 +#define NSApplicationSupportDirectory NSApplicationDirectory
 +#endif
 +
  char *
- SDL_GetBasePath_REAL(void)
+ SDL_GetBasePath(void)
  {

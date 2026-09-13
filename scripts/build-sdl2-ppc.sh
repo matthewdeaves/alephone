@@ -81,7 +81,13 @@ if ! git -C "$SRC" checkout --detach "$PIN" >/tmp/alephone-sdl2-ppc-checkout.log
 	git -C "$SRC" checkout --detach "$PIN"
 fi
 test "$(git -C "$SRC" rev-parse HEAD)" = "$PIN"
-for patch in "$PATCH_FILE" "$VIDEO_PATCH_FILE" "$DISPLAY_PATCH_FILE" "$DRAIN_PATCH_FILE"; do
+# alephone#36: FILESYSTEM_PATCH_FILE used to be scp'd to the host and hashed
+# into the provenance marker below without ever actually being applied here
+# -- a hardcoded perl -0pi substitution did the real work instead, so the
+# tracked patch file and the marker's claim about it were both fiction. Now
+# applied through the same mechanism as every other patch, so there is only
+# one real source of truth for what's actually in the tree.
+for patch in "$PATCH_FILE" "$VIDEO_PATCH_FILE" "$DISPLAY_PATCH_FILE" "$FILESYSTEM_PATCH_FILE" "$DRAIN_PATCH_FILE"; do
 	if git -C "$SRC" apply --recount --reverse --check "$patch" 2>/dev/null; then
 		echo "[sdl2-ppc] source patch already applied: $(basename "$patch")"
 	else
@@ -89,12 +95,6 @@ for patch in "$PATCH_FILE" "$VIDEO_PATCH_FILE" "$DISPLAY_PATCH_FILE" "$DRAIN_PAT
 		git -C "$SRC" apply --recount "$patch"
 	fi
 done
-FILESYSTEM_SOURCE="$SRC/src/filesystem/cocoa/SDL_sysfilesystem.m"
-if ! grep -q '^#define NSApplicationSupportDirectory NSApplicationDirectory$' "$FILESYSTEM_SOURCE"; then
-	grep -q '^#include "SDL_filesystem.h"$' "$FILESYSTEM_SOURCE"
-	perl -0pi -e 's@(#include "SDL_filesystem\.h"\n)@$1\n#ifndef NSApplicationSupportDirectory\n#define NSApplicationSupportDirectory NSApplicationDirectory\n#endif\n@' "$FILESYSTEM_SOURCE"
-	grep -q '^#define NSApplicationSupportDirectory NSApplicationDirectory$' "$FILESYSTEM_SOURCE"
-fi
 
 WRAPPER="$ROOT/.sdl2-cc"
 cat > "$WRAPPER" <<'EOF'

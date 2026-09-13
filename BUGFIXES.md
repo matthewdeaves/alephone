@@ -3,6 +3,27 @@
 One short entry per real bug fixed in this fork: what it was, what the fix was.
 Newest first.
 
+- **Release candidate could not launch at all on modern macOS whenever the
+  fat binary included a ppc slice** (alephone#34), found running the
+  imac-2019 (Sequoia) smoke check `CLAUDE.md` requires before any release.
+  `package-dmg.sh` deliberately shipped the *whole* app bundle unsigned, not
+  ad-hoc signed, whenever `lipo -archs` showed a ppc slice -- codesign can
+  touch a ppc slice's bytes, and the project wants those bytes pristine for
+  the ppc weak-linking check (`nm -arch ppc -u` vs the 10.3.9 symbol set).
+  On modern macOS, though, RunningBoard refuses to spawn a fully unsigned
+  process outright (measured live: `RBSRequestErrorDomain` code 5,
+  "Launchd job spawn failed" -- not a Gatekeeper warning, the process never
+  starts), and code review independently found the same line and noted
+  AMFI would refuse an unsigned arm64 Mach-O the same way on Apple Silicon.
+  Confirmed the cause by isolation before fixing: a signed, ppc-stripped
+  copy of the exact same binary launched fine via the identical path.
+  Fixed by signing only the non-ppc slices of the executable (thin out
+  ppc, ad-hoc `codesign` the rest, `lipo` the untouched ppc slice back in)
+  instead of skipping signing entirely -- verified the ppc slice's bytes
+  are sha256-identical before and after, then verified the fix itself with
+  a real deploy + LaunchServices launch on imac-2019 (SMOKE PASS, process
+  stays running 10s+). Not verified on real arm64 hardware.
+
 - **PPC/Leopard on ATI R300-class cards: shader renderer unplayably slow
   (~0.5fps) despite the driver reporting full GLSL support** (alephone#16).
   Reported repeatedly on real `imac-g5` hardware (ATI Radeon 9600/RV351)

@@ -45,10 +45,37 @@ STAGE="$ROOT/.sdl-stage.$$"
 MARKER=.alephone-sdl2-ppc-provenance
 PATCH_DIGEST="$(cat "$PATCH_FILE" "$VIDEO_PATCH_FILE" "$DISPLAY_PATCH_FILE" "$FILESYSTEM_PATCH_FILE" "$DRAIN_PATCH_FILE" | shasum -a 256 | awk '{print $1}')"
 EXPECTED="SDL2 2.0.3 pin=$PIN patch-sha256=$PATCH_DIGEST patches=g3-no-altivec,g3-cocoa-video-no-altivec,panther-display-name,panther-filesystem,panther-drain target=powerpc-apple-darwin8 cpu=generic-g3 flags=-arch,ppc,-mmacosx-version-min=10.3,--disable-altivec,--disable-joystick"
-CC="$HOME/gcc14-ppc/bin/powerpc-apple-darwin8-gcc"
-CXX="$HOME/gcc14-ppc/bin/powerpc-apple-darwin8-g++"
 OBJC="$HOME/gcc14-ppc-objc/bin/powerpc-apple-darwin8-gcc"
 GCCBASE="$HOME/gcc14-ppc-objc/lib/gcc/powerpc-apple-darwin8/14.2.0"
+# old-mac-build-host#81: not every build host has the plain C/C++-only
+# ~/gcc14-ppc yet (as of 2026-09-13, only mini-intel2 has the ObjC-capable
+# ~/gcc14-ppc-objc; mini-intel's plain toolchain predates it and hasn't
+# caught up). SDL2 2.0.3's build is plain C at its core (only the Cocoa
+# backend's .m files need real Objective-C) and gcc14-ppc-objc's gcc
+# compiles plain C fine, so fall back to it -- detect by existence, not
+# hostname, matching this repo's existing convention (build.sh:56-58's SDK
+# path). CXX has no fallback: gcc14-ppc-objc was built --enable-languages=
+# c,objc (no C++) and SDL2 2.0.3 doesn't need one; if that ever changes,
+# this will fail loudly on the missing binary rather than silently.
+if [ -x "$HOME/gcc14-ppc/bin/powerpc-apple-darwin8-gcc" ]; then
+	CC="$HOME/gcc14-ppc/bin/powerpc-apple-darwin8-gcc"
+	CXX="$HOME/gcc14-ppc/bin/powerpc-apple-darwin8-g++"
+	CXXCPP_OVERRIDE=""
+else
+	echo "[sdl2-ppc] no plain ~/gcc14-ppc on this host -- using ~/gcc14-ppc-objc's gcc for C too"
+	CC="$OBJC"
+	CXX="$OBJC"
+	# autoconf's AC_PROG_CXXCPP is unconditional and fatal on failure, even
+	# though SDL2 2.0.3 has zero .cpp files and never actually invokes
+	# CXXCPP for real compilation in this configuration. This gcc build
+	# rejects any *.cpp-suffixed input at the driver level regardless of
+	# content ("C++ compiler not installed on this system"), which fails
+	# autoconf's own conftest.cpp sanity check outright -- there is no
+	# flag/workaround for that gcc-side behavior, so satisfy the check with
+	# the build host's native macOS cpp instead (only ever asked to
+	# preprocess autoconf's own trivial test snippet, never real source).
+	CXXCPP_OVERRIDE="/usr/bin/cpp"
+fi
 
 if [ -d /Developer/SDKs/MacOSX10.3.9.sdk ]; then
 	SDK=/Developer/SDKs/MacOSX10.3.9.sdk
@@ -131,12 +158,13 @@ export ALEPHONE_SDL_CC="$CC" ALEPHONE_SDL_OBJC="$OBJC"
 export ALEPHONE_SDL_GCCBASE="$GCCBASE" ALEPHONE_SDL_SDK="$SDK"
 
 FLAGS="-O2 -arch ppc -mcpu=750 -mmacosx-version-min=10.3 -isysroot $SDK -include stddef.h"
+CXXCPP="${CXXCPP_OVERRIDE:-$CXX -E $FLAGS}"
 mkdir "$BUILD" "$STAGE"
 cd "$BUILD"
 "$SRC/configure" \
 	--host=powerpc-apple-darwin8 --prefix="$FINAL" \
 	--disable-shared --enable-static --disable-altivec --disable-joystick --disable-haptic --without-x \
-	CC="$WRAPPER" CPP="$WRAPPER -E $FLAGS" CXX="$CXX" CXXCPP="$CXX -E $FLAGS" \
+	CC="$WRAPPER" CPP="$WRAPPER -E $FLAGS" CXX="$CXX" CXXCPP="$CXXCPP" \
 	CFLAGS="$FLAGS -Wno-error=incompatible-pointer-types" CXXFLAGS="$FLAGS" LDFLAGS="$FLAGS" \
 	> /tmp/alephone-sdl2-ppc-configure.log 2>&1 || { tail -50 /tmp/alephone-sdl2-ppc-configure.log; exit 1; }
 make -j2 > /tmp/alephone-sdl2-ppc-build.log 2>&1 || { tail -50 /tmp/alephone-sdl2-ppc-build.log; exit 1; }

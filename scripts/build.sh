@@ -428,10 +428,20 @@ REMOTE_BUILD
 		# so package-dmg.sh can bundle it into each app's Contents/Frameworks
 		# and retarget the load command to @executable_path -- the same
 		# self-contained shape quakespasm ships SDL.framework in, not a fixed
-		# host path. Both toolchain paths above use the SAME $SDL_DIR, so this
-		# one fetch/retarget step covers either.
+		# host path.
+		#
+		# alephone#33, 2026-09-13: this path is a SEPARATE literal from the
+		# $SDL_DIR the remote heredoc above uses to compile/link against --
+		# it is NOT the same shell variable (this runs outside that heredoc's
+		# subshell) despite an earlier version of this comment claiming so.
+		# Got out of sync exactly once already: $SDL_DIR was repointed at
+		# sdl2-snow-x86_64 (the 10.6-floor prefix, #33/#31) but this fetch
+		# kept pulling the old 10.7 one, silently shipping the wrong dylib
+		# with no error anywhere in the build log. Keep these two paths
+		# equal by hand until/unless this gets refactored to pass SDL_DIR
+		# through explicitly.
 		mkdir -p "$REPO_ROOT/build/deps-x86_64"
-		scp -q "$BUILD_HOST:/Users/mini/oldmac/sdl2-x86_64/lib/libSDL2-2.0.0.dylib" \
+		scp -q "$BUILD_HOST:/Users/mini/oldmac/sdl2-snow-x86_64/lib/libSDL2-2.0.0.dylib" \
 			"$REPO_ROOT/build/deps-x86_64/libSDL2-2.0.0.dylib"
 		echo "[build] fetched build/deps-x86_64/libSDL2-2.0.0.dylib"
 
@@ -440,7 +450,7 @@ REMOTE_BUILD
 		# cannot parse the PPC cross-compiled slice's load commands at all
 		# ("malformed load command 0 (cmdsize is zero)", measured 2026-08-28)
 		# and aborts on the whole fat file once ppc is lipo'd in.
-		install_name_tool -change /Users/mini/oldmac/sdl2-x86_64/lib/libSDL2-2.0.0.dylib \
+		install_name_tool -change /Users/mini/oldmac/sdl2-snow-x86_64/lib/libSDL2-2.0.0.dylib \
 			@executable_path/../Frameworks/libSDL2-2.0.0.dylib \
 			"$REPO_ROOT/build/alephone-x86_64"
 		echo "[build] retargeted libSDL2 load command to @executable_path"

@@ -36,20 +36,21 @@ done
 [ -f "$MARATHON_2_DATA/Map.sceA" ] || { echo "package-dmg.sh: Marathon 2 Map.sceA missing from $MARATHON_2_DATA" >&2; exit 1; }
 [ -f "$MARATHON_INFINITY_DATA/Map.sceA" ] || { echo "package-dmg.sh: Marathon Infinity Map.sceA missing from $MARATHON_INFINITY_DATA" >&2; exit 1; }
 
-# Do not destroy a previous staging tree until every required scenario input
-# has passed validation.  A bad override must leave the last inspectable
-# candidate intact for diagnosis or rollback.
-mkdir -p "$DIST_DIR" "$STAGE_DIR"
-rm -rf "$STAGE_DIR"
-mkdir -p "$STAGE_DIR/Aleph One/Scenarios"
-
 # Ensure binary exists.  A caller staging one architecture for validation may
 # select it explicitly; otherwise retain the historic fat-then-PPC fallback.
+# Checked before any destructive staging step below -- see the comment there.
 BIN_SRC="${ALEPHONE_BINARY:-$REPO_ROOT/build/alephone}"
 if [ ! -f "$BIN_SRC" ] && [ -z "${ALEPHONE_BINARY:-}" ]; then
 	BIN_SRC="$REPO_ROOT/build/alephone-ppc"
 fi
 [ -f "$BIN_SRC" ] || { echo "package-dmg.sh: no binary found in build/"; exit 1; }
+
+# Do not destroy a previous staging tree until every required input -- scenario
+# data above, binary above -- has passed validation.  A bad override must
+# leave the last inspectable candidate intact for diagnosis or rollback.
+mkdir -p "$DIST_DIR" "$STAGE_DIR"
+rm -rf "$STAGE_DIR"
+mkdir -p "$STAGE_DIR/Aleph One/Scenarios"
 BIN_ARCHS="$(lipo -archs "$BIN_SRC" 2>/dev/null || true)"
 case "$BIN_ARCHS" in
 	*ppc*) BIN_HAS_PPC=1 ;;
@@ -204,8 +205,37 @@ EOF
 	# keep the executable unsigned: signing mutates the exact PPC candidate by
 	# adding LC_CODE_SIGNATURE.  Modern-only bundles retain the old signing
 	# path.
+	#
+	# alephone#34: leaving the WHOLE bundle unsigned whenever ppc is present
+	# (the old behaviour here) doesn't just miss the Gatekeeper prompt -- on
+	# modern macOS RunningBoard refuses to spawn a fully unsigned process at
+	# all (measured live on imac-2019/Sequoia: RBSRequestErrorDomain code 5,
+	# "Launchd job spawn failed"), so a ppc-containing release could not be
+	# launched at all on any modern host, not merely warned about. Fix: sign
+	# only the non-ppc slices of the main executable, leaving the ppc slice's
+	# bytes byte-for-byte untouched (its own weak-linking verification, e.g.
+	# nm -arch ppc -u vs the 10.3.9 symbol set, depends on those exact bytes).
+	# Deliberately does not attempt --deep bundle-level signing (nested
+	# dylibs/Info.plist) in the ppc case -- that would try to re-sign the main
+	# executable as a whole and reintroduce the same ppc problem; scoped to
+	# what's needed to let RunningBoard/AMFI spawn the process (verified live
+	# on imac-2019 x86_64; not verified on real arm64 hardware this pass).
 	if [ "$BIN_HAS_PPC" = 1 ]; then
-		echo "[package] PPC slice present; leaving legacy app bundle unsigned"
+		local EXEC_PATH="$APP_DIR/Contents/MacOS/$EXEC_NAME"
+		local PPC_THIN NONPPC_THIN
+		PPC_THIN="$(mktemp "${TMPDIR:-/tmp}/ppc-slice.XXXXXX")"
+		NONPPC_THIN="$(mktemp "${TMPDIR:-/tmp}/nonppc-slice.XXXXXX")"
+		if lipo -thin ppc "$EXEC_PATH" -output "$PPC_THIN" 2>/tmp/codesign-${GAME_NAME// /_}.log \
+			&& lipo -remove ppc "$EXEC_PATH" -output "$NONPPC_THIN" 2>>/tmp/codesign-${GAME_NAME// /_}.log \
+			&& codesign --force --sign - "$NONPPC_THIN" 2>>/tmp/codesign-${GAME_NAME// /_}.log \
+			&& lipo -create "$PPC_THIN" "$NONPPC_THIN" -output "$EXEC_PATH" 2>>/tmp/codesign-${GAME_NAME// /_}.log; then
+			echo "[package] PPC slice present; signed the non-ppc slices only, ppc bytes untouched"
+			codesign -dv "$EXEC_PATH" 2>&1 | sed 's/^/  [codesign] /' || true
+		else
+			echo "WARNING: per-slice signing failed for $EXEC_PATH, see /tmp/codesign-${GAME_NAME// /_}.log -- leaving fully unsigned" >&2
+			cat "/tmp/codesign-${GAME_NAME// /_}.log" >&2
+		fi
+		rm -f "$PPC_THIN" "$NONPPC_THIN"
 	elif codesign --force --deep -s - "$APP_DIR" 2>/tmp/codesign-${GAME_NAME// /_}.log; then
 		codesign --verify --verbose=2 "$APP_DIR" 2>&1 | sed 's/^/  [codesign] /'
 	else

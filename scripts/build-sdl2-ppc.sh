@@ -3,12 +3,23 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PIN=bd33187009c97e2c06bdeb10d7faf3ba60abdda5
-PATCH_FILE="$REPO_ROOT/scripts/patches/sdl2-ppc-g3-no-altivec.patch"
-VIDEO_PATCH_FILE="$REPO_ROOT/scripts/patches/sdl2-ppc-g3-cocoa-video-no-altivec.patch"
-DISPLAY_PATCH_FILE="$REPO_ROOT/scripts/patches/sdl2-ppc-panther-display-name.patch"
-FILESYSTEM_PATCH_FILE="$REPO_ROOT/scripts/patches/sdl2-ppc-panther-filesystem.patch"
-DRAIN_PATCH_FILE="$REPO_ROOT/scripts/patches/sdl2-ppc-panther-drain.patch"
+# alephone#22/#37, old-mac-build-host#81: source of truth for the Panther/G3
+# SDL2 2.0.3 tree moved from this repo's own local patch files to deps'
+# consolidated fork (matthewdeaves/SDL, per retro-agents/briefs/deps.md).
+# deps builds every fleet floor patch there as a real commit, tagged, on top
+# of matthewdeaves/panther-sdl2@oldmac (alex-free/panther-sdl2@bd33187 + the
+# 6 SDK/API-floor commits + the ported pre-10.5 joystick backend, the exact
+# set this script used to apply as 4 local patch files) plus SDL#1 (the
+# -drain/EXC_BREAKPOINT Panther crash fix, alephone#37). Verified by hand
+# 2026-09-13 that retro/panther-ppc-sdl1-fix-v2's tree already carries
+# equivalent real fixes for every one of this script's old local patches
+# (altivec.h guard, IODisplay 10.4-only symbol, NSApplicationSupportDirectory
+# fallback) plus the drain fix in the actual crash file
+# (src/file/cocoa/SDL_rwopsbundlesupport.m) -- do not reintroduce the local
+# patches on top of this, they would be redundant or conflict.
+DEPS_SDL_REPO="https://github.com/matthewdeaves/SDL.git"
+DEPS_SDL_TAG="retro/panther-ppc-sdl1-fix-v2"
+PIN=1b299830ce15b9d4e8bf7bee3c14436ed5376506
 BUILD_HOST_CLAIMED=0
 
 if [ -z "${BUILD_HOST:-}" ]; then
@@ -22,29 +33,19 @@ if [ -z "${BUILD_HOST:-}" ]; then
 fi
 trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/pick-build-host.sh" --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
 
-scp -q "$PATCH_FILE" "$BUILD_HOST:/tmp/alephone-sdl2-ppc-g3-no-altivec.patch"
-scp -q "$VIDEO_PATCH_FILE" "$BUILD_HOST:/tmp/alephone-sdl2-ppc-g3-cocoa-video-no-altivec.patch"
-scp -q "$DISPLAY_PATCH_FILE" "$BUILD_HOST:/tmp/alephone-sdl2-ppc-panther-display-name.patch"
-scp -q "$FILESYSTEM_PATCH_FILE" "$BUILD_HOST:/tmp/alephone-sdl2-ppc-panther-filesystem.patch"
-scp -q "$DRAIN_PATCH_FILE" "$BUILD_HOST:/tmp/alephone-sdl2-ppc-panther-drain.patch"
-ssh "$BUILD_HOST" 'bash -s' -- "$PIN" /tmp/alephone-sdl2-ppc-g3-no-altivec.patch /tmp/alephone-sdl2-ppc-g3-cocoa-video-no-altivec.patch /tmp/alephone-sdl2-ppc-panther-display-name.patch /tmp/alephone-sdl2-ppc-panther-filesystem.patch /tmp/alephone-sdl2-ppc-panther-drain.patch <<'REMOTE_BUILD'
+ssh "$BUILD_HOST" 'bash -s' -- "$PIN" "$DEPS_SDL_REPO" "$DEPS_SDL_TAG" <<'REMOTE_BUILD'
 set -euo pipefail
 
 PIN="$1"
-PATCH_FILE="$2"
-VIDEO_PATCH_FILE="$3"
-DISPLAY_PATCH_FILE="$4"
-FILESYSTEM_PATCH_FILE="$5"
-DRAIN_PATCH_FILE="$6"
+DEPS_SDL_REPO="$2"
+DEPS_SDL_TAG="$3"
 ROOT="$HOME/oldmac/alephone"
-SHARED="$HOME/oldmac/vendor/panther-sdl2"
 SRC="$ROOT/panther-sdl2"
 BUILD="$ROOT/panther-sdl2-build.$$"
 FINAL="$ROOT/sdl2-ppc-tiger103"
 STAGE="$ROOT/.sdl-stage.$$"
 MARKER=.alephone-sdl2-ppc-provenance
-PATCH_DIGEST="$(cat "$PATCH_FILE" "$VIDEO_PATCH_FILE" "$DISPLAY_PATCH_FILE" "$FILESYSTEM_PATCH_FILE" "$DRAIN_PATCH_FILE" | shasum -a 256 | awk '{print $1}')"
-EXPECTED="SDL2 2.0.3 pin=$PIN patch-sha256=$PATCH_DIGEST patches=g3-no-altivec,g3-cocoa-video-no-altivec,panther-display-name,panther-filesystem,panther-drain target=powerpc-apple-darwin8 cpu=generic-g3 flags=-arch,ppc,-mmacosx-version-min=10.3,--disable-altivec,--disable-joystick"
+EXPECTED="SDL2 2.0.3 pin=$PIN (matthewdeaves/SDL@$DEPS_SDL_TAG) target=powerpc-apple-darwin8 cpu=generic-g3 flags=-arch,ppc,-mmacosx-version-min=10.3,--disable-altivec,--disable-joystick"
 OBJC="$HOME/gcc14-ppc-objc/bin/powerpc-apple-darwin8-gcc"
 GCCBASE="$HOME/gcc14-ppc-objc/lib/gcc/powerpc-apple-darwin8/14.2.0"
 # old-mac-build-host#81: not every build host has the plain C/C++-only
@@ -92,36 +93,24 @@ if [ -x "$FINAL/bin/sdl2-config" ] && [ -f "$FINAL/lib/libSDL2.a" ] && \
 	exit 0
 fi
 
-# Do not assert $SHARED's current HEAD matches our pin: it is a shared
-# mirror other ports (e.g. old-mac-halflife) also use and check out their
-# own commits into, so its live HEAD can legitimately be anything. Only
-# require that our pinned commit exists as an object there (a real clone
-# carries full history, not just the checked-out ref) and explicitly check
-# it out in our own private clone instead of trusting SHARED's HEAD.
-git -C "$SHARED" cat-file -e "$PIN" 2>/dev/null
+# Source of truth is now deps' own fork+tag (matthewdeaves/SDL), not a local
+# mirror we apply our own patches onto -- see the header comment above. A
+# repo identity change (this used to point at matthewdeaves/panther-sdl2)
+# means an existing $SRC clone's origin can be stale; if so, drop it rather
+# than mixing histories from two different repos in one working tree.
 mkdir -p "$ROOT"
-if [ ! -d "$SRC/.git" ]; then
-	git clone "$SHARED" "$SRC"
+if [ -d "$SRC/.git" ] && [ "$(git -C "$SRC" config --get remote.origin.url 2>/dev/null)" != "$DEPS_SDL_REPO" ]; then
+	echo "[sdl2-ppc] existing $SRC tracks a different remote than $DEPS_SDL_REPO -- removing stale clone"
+	rm -rf "$SRC"
 fi
-if ! git -C "$SRC" checkout --detach "$PIN" >/tmp/alephone-sdl2-ppc-checkout.log 2>&1; then
-	git -C "$SRC" fetch "$SHARED" "$PIN"
-	git -C "$SRC" checkout --detach "$PIN"
+if [ ! -d "$SRC/.git" ]; then
+	git clone --depth 1 --branch "$DEPS_SDL_TAG" "$DEPS_SDL_REPO" "$SRC" >/tmp/alephone-sdl2-ppc-checkout.log 2>&1
+fi
+if [ "$(git -C "$SRC" rev-parse HEAD)" != "$PIN" ]; then
+	git -C "$SRC" fetch --depth 1 origin "tag" "$DEPS_SDL_TAG" >>/tmp/alephone-sdl2-ppc-checkout.log 2>&1
+	git -C "$SRC" checkout --detach "$PIN" >>/tmp/alephone-sdl2-ppc-checkout.log 2>&1
 fi
 test "$(git -C "$SRC" rev-parse HEAD)" = "$PIN"
-# alephone#36: FILESYSTEM_PATCH_FILE used to be scp'd to the host and hashed
-# into the provenance marker below without ever actually being applied here
-# -- a hardcoded perl -0pi substitution did the real work instead, so the
-# tracked patch file and the marker's claim about it were both fiction. Now
-# applied through the same mechanism as every other patch, so there is only
-# one real source of truth for what's actually in the tree.
-for patch in "$PATCH_FILE" "$VIDEO_PATCH_FILE" "$DISPLAY_PATCH_FILE" "$FILESYSTEM_PATCH_FILE" "$DRAIN_PATCH_FILE"; do
-	if git -C "$SRC" apply --recount --reverse --check "$patch" 2>/dev/null; then
-		echo "[sdl2-ppc] source patch already applied: $(basename "$patch")"
-	else
-		git -C "$SRC" apply --recount --check "$patch"
-		git -C "$SRC" apply --recount "$patch"
-	fi
-done
 
 WRAPPER="$ROOT/.sdl2-cc"
 cat > "$WRAPPER" <<'EOF'

@@ -99,6 +99,21 @@ fi
 WRAPPER="$ROOT/.sdl2-cc"
 cat > "$WRAPPER" <<'EOF'
 #!/bin/sh
+# SDL2 2.0.3's configure unconditionally adds -fpascal-strings for any
+# Darwin/macOS target (an Apple-GCC-only extension, used for old Mac
+# Toolbox Pascal-string literals) -- GCC 14 (this cross-toolchain, a
+# mainline FSF build, not Apple's fork) does not implement it at all and
+# aborts with "unrecognized command-line option". Nothing in this file
+# uses Pascal string literals, so dropping the flag is safe; strip it here
+# rather than patching SDL2's own configure/Makefile.
+args=""
+for arg in "$@"; do
+	case "$arg" in
+		-fpascal-strings) continue ;;
+	esac
+	args="$args $arg"
+done
+set -- $args
 for arg in "$@"; do
 	case "$arg" in
 		*.m|objective-c) exec "$ALEPHONE_SDL_OBJC" -fnext-runtime -fobjc-exceptions -nostdinc \

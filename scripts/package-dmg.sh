@@ -222,11 +222,23 @@ EOF
 	# on imac-2019 x86_64; not verified on real arm64 hardware this pass).
 	if [ "$BIN_HAS_PPC" = 1 ]; then
 		local EXEC_PATH="$APP_DIR/Contents/MacOS/$EXEC_NAME"
-		local PPC_THIN NONPPC_THIN
+		local PPC_THIN NONPPC_THIN PPC_ARCH_NAME
 		PPC_THIN="$(mktemp "${TMPDIR:-/tmp}/ppc-slice.XXXXXX")"
 		NONPPC_THIN="$(mktemp "${TMPDIR:-/tmp}/nonppc-slice.XXXXXX")"
-		if lipo -thin ppc "$EXEC_PATH" -output "$PPC_THIN" 2>/tmp/codesign-${GAME_NAME// /_}.log \
-			&& lipo -remove ppc "$EXEC_PATH" -output "$NONPPC_THIN" 2>>/tmp/codesign-${GAME_NAME// /_}.log \
+		# alephone#22/#37 follow-up, 2026-09-13: lipo -thin/-remove need the
+		# EXACT arch label this lipo's own name table uses, and that is not
+		# always the literal string "ppc" -- this GCC14-cross-built slice
+		# (-mcpu=750) carries a cpusubtype this lipo reports/matches only as
+		# "ppc750", not the generic "ppc" alias an older toolchain's ppc
+		# slice apparently used (this hardcoded "ppc" literal worked for the
+		# previous candidate's ppc slice, built differently). Read the real
+		# name back from lipo -archs (already known to contain some ppc*
+		# token -- BIN_HAS_PPC above already matched *ppc*) instead of
+		# assuming one spelling.
+		PPC_ARCH_NAME="$(lipo -archs "$EXEC_PATH" 2>/dev/null | tr ' ' '\n' | grep '^ppc' | head -1)"
+		[ -n "$PPC_ARCH_NAME" ] || PPC_ARCH_NAME="ppc"
+		if lipo -thin "$PPC_ARCH_NAME" "$EXEC_PATH" -output "$PPC_THIN" 2>/tmp/codesign-${GAME_NAME// /_}.log \
+			&& lipo -remove "$PPC_ARCH_NAME" "$EXEC_PATH" -output "$NONPPC_THIN" 2>>/tmp/codesign-${GAME_NAME// /_}.log \
 			&& codesign --force --sign - "$NONPPC_THIN" 2>>/tmp/codesign-${GAME_NAME// /_}.log \
 			&& lipo -create "$PPC_THIN" "$NONPPC_THIN" -output "$EXEC_PATH" 2>>/tmp/codesign-${GAME_NAME// /_}.log; then
 			echo "[package] PPC slice present; signed the non-ppc slices only, ppc bytes untouched"

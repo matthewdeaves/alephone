@@ -7,6 +7,21 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# sha256 of the slice with Mach-O cputype $2 in fat file $1 (18 = PowerPC);
+# empty if the file is thin or has no such slice (#40).
+slice_digest () {
+	python3 - "$1" "$2" <<'PY'
+import hashlib, struct, sys
+d = open(sys.argv[1], 'rb').read()
+if d[:4] == b'\xca\xfe\xba\xbe':
+    for i in range(struct.unpack('>I', d[4:8])[0]):
+        ct, cs, off, size, al = struct.unpack('>iiIII', d[8 + 20 * i:28 + 20 * i])
+        if ct == int(sys.argv[2]):
+            print(hashlib.sha256(d[off:off + size]).hexdigest())
+            break
+PY
+}
 cd "$REPO_ROOT"
 
 # --match restricts to client-tag patterns (release-* / vX.Y.Z) so this never
@@ -51,7 +66,8 @@ fi
 mkdir -p "$DIST_DIR" "$STAGE_DIR"
 rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR/Aleph One/Scenarios"
-BIN_ARCHS="$(lipo -archs "$BIN_SRC" 2>/dev/null || true)"
+# #40: not lipo -- the workstation's lipo no longer lists ppc slices.
+BIN_ARCHS="$("$REPO_ROOT/scripts/macho-archs.sh" "$BIN_SRC" 2>/dev/null || true)"
 case "$BIN_ARCHS" in
 	*ppc*) BIN_HAS_PPC=1 ;;
 	*) BIN_HAS_PPC=0 ;;
@@ -222,32 +238,40 @@ EOF
 	# on imac-2019 x86_64; not verified on real arm64 hardware this pass).
 	if [ "$BIN_HAS_PPC" = 1 ]; then
 		local EXEC_PATH="$APP_DIR/Contents/MacOS/$EXEC_NAME"
-		local PPC_THIN NONPPC_THIN PPC_ARCH_NAME
-		PPC_THIN="$(mktemp "${TMPDIR:-/tmp}/ppc-slice.XXXXXX")"
-		NONPPC_THIN="$(mktemp "${TMPDIR:-/tmp}/nonppc-slice.XXXXXX")"
-		# alephone#22/#37 follow-up, 2026-09-13: lipo -thin/-remove need the
-		# EXACT arch label this lipo's own name table uses, and that is not
-		# always the literal string "ppc" -- this GCC14-cross-built slice
-		# (-mcpu=750) carries a cpusubtype this lipo reports/matches only as
-		# "ppc750", not the generic "ppc" alias an older toolchain's ppc
-		# slice apparently used (this hardcoded "ppc" literal worked for the
-		# previous candidate's ppc slice, built differently). Read the real
-		# name back from lipo -archs (already known to contain some ppc*
-		# token -- BIN_HAS_PPC above already matched *ppc*) instead of
-		# assuming one spelling.
-		PPC_ARCH_NAME="$(lipo -archs "$EXEC_PATH" 2>/dev/null | tr ' ' '\n' | grep '^ppc' | head -1)"
-		[ -n "$PPC_ARCH_NAME" ] || PPC_ARCH_NAME="ppc"
-		if lipo -thin "$PPC_ARCH_NAME" "$EXEC_PATH" -output "$PPC_THIN" 2>/tmp/codesign-${GAME_NAME// /_}.log \
-			&& lipo -remove "$PPC_ARCH_NAME" "$EXEC_PATH" -output "$NONPPC_THIN" 2>>/tmp/codesign-${GAME_NAME// /_}.log \
-			&& codesign --force --sign - "$NONPPC_THIN" 2>>/tmp/codesign-${GAME_NAME// /_}.log \
-			&& lipo -create "$PPC_THIN" "$NONPPC_THIN" -output "$EXEC_PATH" 2>>/tmp/codesign-${GAME_NAME// /_}.log; then
-			echo "[package] PPC slice present; signed the non-ppc slices only, ppc bytes untouched"
-			codesign -dv "$EXEC_PATH" 2>&1 | sed 's/^/  [codesign] /' || true
+		# alephone#40: the workstation's lipo (CLT 27) can no longer name,
+		# thin or even list the ppc750 slice, and silently drops it from
+		# -create. So never split out ppc at all: thin each non-ppc slice by
+		# its own name with llvm-lipo, sign it, and -replace it in place. The
+		# ppc slice is not rewritten; verified byte-identical below.
+		local LLIPO SLICE TMPD PPC_BEFORE PPC_AFTER REPLACE_ARGS=""
+		LLIPO="$(command -v llvm-lipo || true)"
+		[ -n "$LLIPO" ] || [ ! -x /opt/homebrew/opt/llvm/bin/llvm-lipo ] || LLIPO=/opt/homebrew/opt/llvm/bin/llvm-lipo
+		TMPD="$(mktemp -d "${TMPDIR:-/tmp}/slices.XXXXXX")"
+		PPC_BEFORE="$(slice_digest "$EXEC_PATH" 18)"
+		if [ -n "$LLIPO" ]; then
+			for SLICE in $("$REPO_ROOT/scripts/macho-archs.sh" "$EXEC_PATH"); do
+				case "$SLICE" in ppc*) continue ;; esac
+				"$LLIPO" "$EXEC_PATH" -thin "$SLICE" -output "$TMPD/$SLICE" 2>>/tmp/codesign-${GAME_NAME// /_}.log \
+					&& codesign --force --sign - "$TMPD/$SLICE" 2>>/tmp/codesign-${GAME_NAME// /_}.log \
+					&& REPLACE_ARGS="$REPLACE_ARGS -replace $SLICE $TMPD/$SLICE" \
+					|| { REPLACE_ARGS=""; break; }
+			done
+		fi
+		if [ -n "$REPLACE_ARGS" ] \
+			&& "$LLIPO" "$EXEC_PATH" $REPLACE_ARGS -output "$TMPD/fat" 2>>/tmp/codesign-${GAME_NAME// /_}.log; then
+			PPC_AFTER="$(slice_digest "$TMPD/fat" 18)"
+			if [ -n "$PPC_BEFORE" ] && [ "$PPC_BEFORE" = "$PPC_AFTER" ]; then
+				mv "$TMPD/fat" "$EXEC_PATH" && chmod 755 "$EXEC_PATH"
+				echo "[package] PPC slice present; signed $("$REPO_ROOT/scripts/macho-archs.sh" "$EXEC_PATH" | tr ' ' '\n' | grep -v '^ppc' | tr '\n' ' ')only, ppc bytes untouched ($PPC_AFTER)"
+			else
+				echo "ERROR: ppc slice changed during signing ($PPC_BEFORE -> $PPC_AFTER); refusing to package it" >&2
+				exit 1
+			fi
 		else
-			echo "WARNING: per-slice signing failed for $EXEC_PATH, see /tmp/codesign-${GAME_NAME// /_}.log -- leaving fully unsigned" >&2
+			echo "WARNING: per-slice signing failed for $EXEC_PATH (llvm-lipo: ${LLIPO:-not found}), see /tmp/codesign-${GAME_NAME// /_}.log -- leaving fully unsigned" >&2
 			cat "/tmp/codesign-${GAME_NAME// /_}.log" >&2
 		fi
-		rm -f "$PPC_THIN" "$NONPPC_THIN"
+		rm -rf "$TMPD"
 	elif codesign --force --deep -s - "$APP_DIR" 2>/tmp/codesign-${GAME_NAME// /_}.log; then
 		codesign --verify --verbose=2 "$APP_DIR" 2>&1 | sed 's/^/  [codesign] /'
 	else

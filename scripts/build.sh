@@ -531,9 +531,19 @@ REMOTE_BUILD
 			_fat_slices="$_fat_slices arm64"
 		fi
 		echo "[fat] slices included: $_fat_slices"
-		lipo -create -output "$REPO_ROOT/build/alephone" $_fat_inputs
-		echo "[fat] Universal binary created at build/alephone:"
-		lipo -info "$REPO_ROOT/build/alephone"
+		# #40: the workstation's lipo (CLT 27) silently drops PPC slices from
+		# -create (exit 0, arm64-only output). llvm-lipo keeps them. Either
+		# way, check the result's headers against the inputs' before trusting it.
+		_lipo="$(command -v llvm-lipo || true)"
+		[ -n "$_lipo" ] || [ ! -x /opt/homebrew/opt/llvm/bin/llvm-lipo ] || _lipo=/opt/homebrew/opt/llvm/bin/llvm-lipo
+		"${_lipo:-lipo}" -create -output "$REPO_ROOT/build/alephone" $_fat_inputs
+		_want="$(for f in $_fat_inputs; do "$REPO_ROOT/scripts/macho-archs.sh" "$f"; done | tr ' ' '\n' | sort | tr '\n' ' ')"
+		_got="$("$REPO_ROOT/scripts/macho-archs.sh" "$REPO_ROOT/build/alephone" | tr ' ' '\n' | sort | tr '\n' ' ')"
+		if [ -z "$_got" ] || [ "$_want" != "$_got" ]; then
+			echo "[fat] ERROR: fused binary has [$_got] but inputs had [$_want] -- ${_lipo:-lipo} dropped a slice (#40)" >&2
+			exit 1
+		fi
+		echo "[fat] Universal binary created at build/alephone: $_got"
 
 		# ppc statically links SDL2; x86_64 and arm64 both bundle it as a
 		# dylib (see build.sh's x86_64 branch and build-arm64.sh), each
@@ -550,7 +560,7 @@ REMOTE_BUILD
 				"$REPO_ROOT/build/deps-x86_64/libSDL2-2.0.0.dylib" \
 				"$REPO_ROOT/build/deps-arm64/libSDL2-2.0.0.dylib"
 			echo "[fat] fused universal SDL2 dylib at build/deps-fat/libSDL2-2.0.0.dylib:"
-			lipo -info "$REPO_ROOT/build/deps-fat/libSDL2-2.0.0.dylib"
+			"$REPO_ROOT/scripts/macho-archs.sh" "$REPO_ROOT/build/deps-fat/libSDL2-2.0.0.dylib"
 		fi
 		;;
 

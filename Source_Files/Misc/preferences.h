@@ -305,8 +305,16 @@ void read_preferences();
 void handle_preferences(void);
 void write_preferences(void);
 
+// alephone#39: ALEPHONE_FPS_TARGET=<n> overrides the preference for this
+// run only (benchmarking); -1 when unset. Never written back to prefs.
+extern int16 fps_target_override;
+
+// alephone#39: true when this launch found no preferences file (first run),
+// so capability-based graphics defaults may be applied.
+extern bool preferences_were_defaulted;
+
 static inline int16 get_fps_target() {
-	return graphics_preferences->fps_target;
+	return fps_target_override >= 0 ? fps_target_override : graphics_preferences->fps_target;
 }
 
 void transition_preferences(const DirectorySpecifier& legacy_prefs_dir);

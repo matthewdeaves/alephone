@@ -3449,10 +3449,16 @@ void transition_preferences(const DirectorySpecifier& legacy_preferences_dir)
  *  Initialize preferences (load from file or setup defaults)
  */
 
+int16 fps_target_override = -1;
+bool preferences_were_defaulted = false;
+
 void initialize_preferences(
 	void)
 {
 	logContext("initializing preferences");
+
+	if (const char *env = getenv("ALEPHONE_FPS_TARGET"))
+		fps_target_override = static_cast<int16>(atoi(env));
 
 	// In case this function gets called more than once...
 	if (!PrefsInited)
@@ -3518,6 +3524,15 @@ void read_preferences ()
 		FileSpec.SetToPreferencesDir();
 		FileSpec += getcstr(temporary,strFILENAMES, filenamePREFERENCES);
 		opened = FileSpec.Open(OFile);
+	}
+
+	// alephone#39: first read only -- a later re-read after the prefs file
+	// has been written must not clear it.
+	static bool first_read = true;
+	if (first_read)
+	{
+		preferences_were_defaulted = !opened;
+		first_read = false;
 	}
 
 	if (!opened) {

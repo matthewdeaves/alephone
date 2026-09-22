@@ -122,6 +122,56 @@ static bool use_classic_ogl = false;    // alephone#12: no GLSL, but a real GL c
 
 #include "screen_shared.h"
 
+#ifdef HAVE_OPENGL
+// alephone#39: choose first-run graphics defaults from what this GL context
+// can do, never from hostname/model/arch. Only settings that trade frame
+// rate for smoothness/quality are touched; the scenario's own look (its
+// Default Preferences.xml: filtering, fog, models) is left alone. An
+// existing preferences file always wins.
+//   tier 0: no GLSL (classic renderer) or no FBO, or a software renderer:
+//           engine defaults unchanged (30 fps target, no anisotropy).
+//   tier 1: GLSL + FBO: 60 fps (interpolated), 4x anisotropy.
+//   tier 2: tier 1 + max texture size >= 8192: display-rate fps
+//           (unlimited, paced by vsync), 16x anisotropy.
+static void apply_first_run_gl_tier(bool classic)
+{
+	static bool done = false;
+	if (done)
+		return;
+	done = true;
+
+	const char *renderer = (const char *) glGetString(GL_RENDERER);
+	GLint max_texture = 0;
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture);
+	bool fbo = OGL_CheckExtension("GL_EXT_framebuffer_object") || OGL_CheckExtension("GL_ARB_framebuffer_object");
+	bool aniso = OGL_CheckExtension("GL_EXT_texture_filter_anisotropic");
+	bool software = !renderer || strstr(renderer, "Software") || strstr(renderer, "Generic") || strstr(renderer, "llvmpipe");
+
+	int tier = 0;
+	if (!classic && fbo && !software)
+		tier = max_texture >= 8192 ? 2 : 1;
+	if (getenv("ALEPHONE_GL_TIER"))
+		tier = std::max(0, std::min(2, atoi(getenv("ALEPHONE_GL_TIER"))));
+
+	printf("gl-tier: %d (renderer '%s', %s, max texture %d, fbo %d, anisotropic %d)\n",
+		   tier, renderer ? renderer : "?", classic ? "classic" : "shader", (int) max_texture, fbo, aniso);
+	if (!preferences_were_defaulted)
+	{
+		printf("gl-tier: existing preferences kept\n");
+		return;
+	}
+	if (tier >= 1)
+	{
+		graphics_preferences->fps_target = tier == 2 ? 0 : 60;
+		if (aniso)
+			graphics_preferences->OGL_Configure.AnisotropyLevel = tier == 2 ? 16.0f : 4.0f;
+	}
+	printf("gl-tier: first run, applied fps target %d, anisotropy %.0f\n",
+		   graphics_preferences->fps_target, graphics_preferences->OGL_Configure.AnisotropyLevel);
+	write_preferences();
+}
+#endif
+
 using namespace alephone;
 
 Screen Screen::m_instance;
@@ -1046,6 +1096,9 @@ static void change_screen_mode(int width, int height, int depth, bool nogl, bool
 		{
 			passed_shader = true;
 		}
+#ifdef HAVE_OPENGL
+		apply_first_run_gl_tier(use_classic_ogl);
+#endif
 	}
 //#endif
 
@@ -1333,8 +1386,61 @@ void update_world_view_camera()
 
 extern bool is_network_pregame;
 
+// alephone#39: opt-in frame-rate log for benchmarking, independent of the
+// on-screen counter (which only runs while shown, and averages per-frame
+// rates). ALEPHONE_FPS_LOG=<seconds> prints frames/elapsed and the worst
+// frame time for each window to stdout, next to the GL_RENDERER lines.
+static void log_frame_rate()
+{
+	using clock = std::chrono::high_resolution_clock;
+	static int interval = -1;
+	static clock::time_point window_start, last_frame;
+	static int frames = 0;
+	static float worst_ms = 0;
+
+	if (interval < 0)
+	{
+		const char *env = getenv("ALEPHONE_FPS_LOG");
+		interval = env ? atoi(env) : 0;
+		if (interval > 0)
+		{
+			const char *renderer = "software";
+#ifdef HAVE_OPENGL
+			if (screen_mode.acceleration != _no_acceleration)
+				renderer = OGL_UseClassicRenderer() ? "classic" : "shader";
+#endif
+			printf("fps-log: window %ds, renderer %s, %dx%d\n", interval, renderer,
+				   MainScreenPixelWidth(), MainScreenPixelHeight());
+			fflush(stdout);
+		}
+		window_start = last_frame = clock::now();
+	}
+	if (interval <= 0)
+		return;
+
+	auto now = clock::now();
+	float ms = std::chrono::duration<float, std::milli>(now - last_frame).count();
+	last_frame = now;
+	if (frames > 0 && ms > worst_ms)
+		worst_ms = ms;
+	++frames;
+
+	float elapsed = std::chrono::duration<float>(now - window_start).count();
+	if (elapsed >= interval)
+	{
+		printf("fps-log: %.1f fps over %.1fs (%d frames), worst frame %.1f ms\n",
+			   frames / elapsed, elapsed, frames, worst_ms);
+		fflush(stdout);
+		window_start = now;
+		frames = 0;
+		worst_ms = 0;
+	}
+}
+
 void render_screen(short ticks_elapsed)
 {
+	log_frame_rate();
+
 	// Make whatever changes are necessary to the world_view structure based on whichever player is frontmost
 	world_view->ticks_elapsed = ticks_elapsed;
 	world_view->tick_count = dynamic_world->tick_count;

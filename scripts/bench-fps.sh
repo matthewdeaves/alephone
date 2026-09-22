@@ -27,6 +27,13 @@ export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-alephone.bench.$$.$(date +%s)}"
 }
 trap '"$REPO_ROOT/scripts/pick-bench-host.sh" --release "$HOST" >/dev/null 2>&1; true' EXIT
 
+# Refuse to launch into a locked/shielded console (old-mac-build-host#88):
+# the game never comes to the front there, so a "pass" would mean nothing.
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gui-precondition.sh" "$HOST" || {
+	echo "UNTESTED: $HOST console is not ready for a GUI launch (gui-precondition.sh)" >&2
+	exit 1
+}
+
 ssh "$HOST" bash -s -- "$ROUNDS" "$SECS" << 'REMOTE_BENCH'
 # No pipefail: Tiger's /bin/bash 2.05b rejects it (see smoke-direct-exec.sh).
 set -u
@@ -37,13 +44,6 @@ DATA="$APP_DIR/Scenarios/Marathon 2"
 FILM="$DATA/Demos/L00.filA"
 W="$HOME/oldmac/alephone/bench"
 [ -x "$EXEC" ] && [ -f "$FILM" ] || { echo "BENCH FAIL: install or demo film missing"; exit 1; }
-
-# imac-2019's console locks on display sleep (old-mac-build-host#88); a
-# fullscreen run into a locked session measures nothing.
-if ioreg -n Root -d1 2>/dev/null | grep -q '"CGSSessionScreenIsLocked" = Yes'; then
-	echo "BENCH UNTESTED: console screen is locked"
-	exit 2
-fi
 
 rm -rf "$W"; mkdir -p "$W/home"
 stop() {

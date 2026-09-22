@@ -28,6 +28,13 @@ OBSERVE_SECS="${2:-15}"
 
 echo "[smoke-direct] $HOST: launching \"Aleph One\" via direct exec (bypassing LaunchServices)..."
 
+# Refuse to launch into a locked/shielded console (old-mac-build-host#88):
+# the game never comes to the front there, so a "pass" would mean nothing.
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gui-precondition.sh" "$HOST" || {
+	echo "UNTESTED: $HOST console is not ready for a GUI launch (gui-precondition.sh)" >&2
+	exit 1
+}
+
 ssh "$HOST" bash -s -- "$(printf '%q' "$OBSERVE_SECS")" << 'REMOTE_SMOKE'
 # Not pipefail: some fleet targets (Tiger 10.4's stock /bin/bash 2.05b)
 # predate it and abort the whole `set` with "invalid option name" on a bare

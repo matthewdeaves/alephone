@@ -167,13 +167,13 @@ printf '%s\n' "$EXPECTED" > "$CANDIDATE/$MARKER"
 test -x "$CANDIDATE/bin/sdl2-config"
 test -f "$CANDIDATE/lib/libSDL2.a"
 test "$(cat "$CANDIDATE/$MARKER")" = "$EXPECTED"
+# The old prefix is moved aside only for the swap and deleted once the new
+# one is in place: no rollback copies left behind (fleet tidy rule, #27).
 if [ -e "$FINAL" ]; then
-	# One rollback prefix, not one per rebuild (#27).
-	rm -rf "$FINAL".previous.*
-	mv "$FINAL" "$FINAL.previous.$(date +%s)"
+	mv "$FINAL" "$FINAL.previous.$$"
 fi
 mv "$CANDIDATE" "$FINAL"
-cd "$ROOT" && rm -rf "$BUILD"
+cd "$ROOT" && rm -rf "$BUILD" "$FINAL".previous.*
 # Best-effort cleanup only: the real work (promoting $FINAL above) has
 # already succeeded, so a leftover staging directory here (e.g. a stray file
 # from `make install`, or a remote $HOME that isn't exactly two path

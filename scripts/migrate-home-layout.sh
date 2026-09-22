@@ -64,11 +64,7 @@ for f in "$ROOT"/*deps*/lib/pkgconfig/*.pc "$ROOT"/*deps*/lib/*.la; do
 		's#\Q$ENV{HOME}\E/alephone-($ENV{ALT})(?![\w-])#$ENV{HOME}/oldmac/alephone/$1#g' "$f"
 done
 
-# build-sdl2-ppc.sh used to leave its per-run build dir behind and keep every
-# previous prefix (#27). Safe under the host lock: no other build is running.
-rm -rf "$ROOT"/panther-sdl2-build.* "$ROOT"/.sdl-stage.*
-# Keep only the newest rollback prefix; the glob sorts by its fixed-width
-# epoch suffix.
-prev=("$ROOT"/sdl2-ppc-tiger103.previous.*)
-for ((i = 0; i + 1 < ${#prev[@]}; i++)); do rm -rf "${prev[$i]}"; done
+# build-sdl2-ppc.sh used to leave its per-run build dir and old prefixes
+# behind (#27). Safe under the host lock: no other build is running.
+rm -rf "$ROOT"/panther-sdl2-build.* "$ROOT"/.sdl-stage.* "$ROOT"/sdl2-ppc-tiger103.previous.*
 REMOTE_MIGRATE

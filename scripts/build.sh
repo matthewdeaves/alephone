@@ -205,7 +205,10 @@ touch -t 202001020000 aclocal.m4
 touch -t 202001030000 configure config.h.in $(find . -name Makefile.in)
 
 DEPS=/Users/mini/oldmac/alephone/intel-deps
-TOOLCHAIN=/Users/mini/gcc14-ppc-build/tools/gcc-7.5.0-host
+# buildhost is moving this out of $HOME into ~/oldmac (tidy, 2026-09-22);
+# use whichever exists, new location first.
+TOOLCHAIN=/Users/mini/oldmac/gcc14-ppc-build/tools/gcc-7.5.0-host
+[ -d "$TOOLCHAIN" ] || TOOLCHAIN=/Users/mini/gcc14-ppc-build/tools/gcc-7.5.0-host
 # alephone#33/#31, manager 14:53: the old sdl2-x86_64 prefix is stock SDL2
 # 2.0.22 built at INTEL_MIN=10.7, so its libSDL2-2.0.0.dylib hard-references
 # an AppKit symbol (_NSBackingPropertyOldScaleFactorKey) that doesn't exist

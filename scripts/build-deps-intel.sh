@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build-deps-intel.sh - Build 6 Aleph One dependencies for x86_64 Intel Mac on mini-intel
 # Target: x86_64 Intel (Mac OS X 10.6+)
-# Toolchain: GCC 7.5.0 (/Users/mini/gcc14-ppc-build/tools/gcc-7.5.0-host/bin)
+# Toolchain: GCC 7.5.0 (~/oldmac/gcc14-ppc-build/tools/gcc-7.5.0-host/bin, or the legacy ~/gcc14-ppc-build)
 
 set -euo pipefail
 
@@ -20,7 +20,10 @@ set -euo pipefail
 PREFIX="/Users/mini/oldmac/alephone/intel-deps"
 SRC_DIR="/Users/mini/oldmac/alephone/deps-src"
 BUILD_DIR="/Users/mini/oldmac/alephone/deps-build-intel"
-TOOLCHAIN="/Users/mini/gcc14-ppc-build/tools/gcc-7.5.0-host"
+# buildhost is moving this out of $HOME into ~/oldmac (tidy, 2026-09-22);
+# use whichever exists, new location first.
+TOOLCHAIN=/Users/mini/oldmac/gcc14-ppc-build/tools/gcc-7.5.0-host
+[ -d "$TOOLCHAIN" ] || TOOLCHAIN=/Users/mini/gcc14-ppc-build/tools/gcc-7.5.0-host
 SDL_DIR="/Users/mini/oldmac/sdl2-x86_64"
 
 mkdir -p "$PREFIX/include" "$PREFIX/lib" "$PREFIX/lib/pkgconfig" "$BUILD_DIR"

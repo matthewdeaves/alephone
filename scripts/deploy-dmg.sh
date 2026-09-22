@@ -63,6 +63,18 @@ DEPLOYED_LIST="$DEPLOY_ROOT/deployed-apps.$$"
 # ships each game's data (Map.scen, Shapes.shps, Sounds.sndz, Physics.phys,
 # Music/, Plugins/, Scripts/) as siblings of the .app, not inside it -- same
 # as what a real drag-to-Applications of a mounted DMG folder would carry over.
+# Fleet rule (old-mac-build-host tidy, 2026-09-22): no rollback copies left
+# behind. Once the new bundle's executable is in place, delete this run's
+# backup; keep it (and say so) only if the new install can't be verified.
+drop_backup () {
+	[ -n "$1" ] || return 0
+	if ls "$2"/Contents/MacOS/* >/dev/null 2>&1; then
+		rm -rf "$1"
+		echo "[deploy] new install verified; removed rollback copy"
+	else
+		echo "[deploy] WARNING: could not verify $2, kept rollback copy at $1" >&2
+	fi
+}
 for app in "$MOUNT"/*/*.app; do
 	[ -d "$app" ] || continue
 	FOUND=1
@@ -91,7 +103,7 @@ for app in "$MOUNT"/*/*.app; do
 		[ -n "$backup" ] && mv "$backup" "$dest"
 		exit 1
 	fi
-	[ -n "$backup" ] && echo "[deploy] retained rollback copy at $backup"
+	drop_backup "$backup" "$dest/$(basename "$app")"
 	echo "[deploy] installed $dest/"
 	echo "$dest/$(basename "$app")" >> "$DEPLOYED_LIST"
 done
@@ -114,7 +126,7 @@ for app in "$MOUNT"/*.app; do
 		[ -n "$backup" ] && mv "$backup" "$dest"
 		exit 1
 	fi
-	[ -n "$backup" ] && echo "[deploy] retained rollback copy at $backup"
+	drop_backup "$backup" "$dest"
 	echo "[deploy] installed $dest"
 	echo "$dest" >> "$DEPLOYED_LIST"
 done

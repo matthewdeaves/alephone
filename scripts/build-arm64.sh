@@ -182,7 +182,7 @@ ensure_arm64_deps
 # (Makefile, config.status, *.o) into a tree another session may be editing.
 # Same isolation ppc/x86_64 get from rsync'ing to a separate directory on the
 # remote build host -- this is the local equivalent.
-BUILD_DIR="$HOME/alephone-build-arm64"
+BUILD_DIR="$HOME/oldmac/alephone/build-arm64"
 echo "[build-arm64] syncing source tree to $BUILD_DIR..."
 mkdir -p "$BUILD_DIR"
 rsync -az --delete $(source_stamp_rsync_excludes "$SOURCE_STAMP_EXCLUDES") \

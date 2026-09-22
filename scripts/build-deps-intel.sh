@@ -8,6 +8,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 BUILD_HOST="mini-intel"
+BUILD_HOST="$BUILD_HOST" "$REPO_ROOT/scripts/migrate-home-layout.sh"
 echo "[deps-intel] building x86_64 Intel dependencies on $BUILD_HOST..."
 
 scp -q "$REPO_ROOT/scripts/patches/boost-1.76.0-less_nocase-no-locale.patch" \
@@ -16,9 +17,9 @@ scp -q "$REPO_ROOT/scripts/patches/boost-1.76.0-less_nocase-no-locale.patch" \
 ssh "$BUILD_HOST" 'bash -s' << 'REMOTE_SCRIPT'
 set -euo pipefail
 
-PREFIX="/Users/mini/alephone-intel-deps"
-SRC_DIR="/Users/mini/alephone-deps-src"
-BUILD_DIR="/Users/mini/alephone-deps-build-intel"
+PREFIX="/Users/mini/oldmac/alephone/intel-deps"
+SRC_DIR="/Users/mini/oldmac/alephone/deps-src"
+BUILD_DIR="/Users/mini/oldmac/alephone/deps-build-intel"
 TOOLCHAIN="/Users/mini/gcc14-ppc-build/tools/gcc-7.5.0-host"
 SDL_DIR="/Users/mini/oldmac/sdl2-x86_64"
 
@@ -97,7 +98,7 @@ fi
 
 echo "=== [4/6] Asio 1.28.0 ==="
 if [ ! -f "$PREFIX/include/asio.hpp" ]; then
-    cp -R /Users/mini/alephone-ppc-deps/include/asio* "$PREFIX/include/" 2>/dev/null || {
+    cp -R /Users/mini/oldmac/alephone/ppc-deps/include/asio* "$PREFIX/include/" 2>/dev/null || {
         cd "$BUILD_DIR"
         tar -xf "$SRC_DIR/asio-1.28.0.tar.bz2" || true
         cp -R asio-1.28.0/include/* "$PREFIX/include/"

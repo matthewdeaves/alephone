@@ -165,9 +165,12 @@ test -x "$CANDIDATE/bin/sdl2-config"
 test -f "$CANDIDATE/lib/libSDL2.a"
 test "$(cat "$CANDIDATE/$MARKER")" = "$EXPECTED"
 if [ -e "$FINAL" ]; then
+	# One rollback prefix, not one per rebuild (#27).
+	rm -rf "$FINAL".previous.*
 	mv "$FINAL" "$FINAL.previous.$(date +%s)"
 fi
 mv "$CANDIDATE" "$FINAL"
+cd "$ROOT" && rm -rf "$BUILD"
 # Best-effort cleanup only: the real work (promoting $FINAL above) has
 # already succeeded, so a leftover staging directory here (e.g. a stray file
 # from `make install`, or a remote $HOME that isn't exactly two path

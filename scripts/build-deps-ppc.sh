@@ -2,7 +2,7 @@
 # build-deps-ppc.sh - Stage and cross-compile PPC dependencies on mini-intel
 # Target: powerpc-apple-darwin8, sysroot: MacOSX10.3.9.sdk
 # Toolchain: /Users/mini/gcc14-ppc
-# Output prefix: /Users/mini/alephone-ppc-deps
+# Output prefix: /Users/mini/oldmac/alephone/ppc-deps
 
 set -euo pipefail
 
@@ -21,12 +21,13 @@ if [ -z "${BUILD_HOST:-}" ]; then
 	echo "[deps-ppc] claimed build host: $BUILD_HOST"
 fi
 trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/pick-build-host.sh" --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
+BUILD_HOST="$BUILD_HOST" "$REPO_ROOT/scripts/migrate-home-layout.sh"
 
 BUILD_HOST="$BUILD_HOST" "$REPO_ROOT/scripts/build-sdl2-ppc.sh"
 
 echo "[deps-ppc] syncing source archives to $BUILD_HOST..."
-ssh "$BUILD_HOST" 'mkdir -p ~/alephone-deps-src ~/alephone-ppc-deps'
-rsync -az "$REPO_ROOT/.deps/" "$BUILD_HOST:~/alephone-deps-src/"
+ssh "$BUILD_HOST" 'mkdir -p ~/oldmac/alephone/deps-src ~/oldmac/alephone/ppc-deps'
+rsync -az "$REPO_ROOT/.deps/" "$BUILD_HOST:~/oldmac/alephone/deps-src/"
 scp -q "$REPO_ROOT/scripts/patches/boost-1.76.0-less_nocase-no-locale.patch" \
 	"$BUILD_HOST:/tmp/boost-1.76.0-less_nocase-no-locale.patch"
 
@@ -34,9 +35,9 @@ echo "[deps-ppc] running cross-compilation on $BUILD_HOST..."
 ssh "$BUILD_HOST" 'bash -s' << 'REMOTE_SCRIPT'
 set -euo pipefail
 
-SRC=~/alephone-deps-src
-BUILD=~/alephone-deps-build
-PREFIX=~/alephone-ppc-deps
+SRC=~/oldmac/alephone/deps-src
+BUILD=~/oldmac/alephone/deps-build
+PREFIX=~/oldmac/alephone/ppc-deps
 TOOLCHAIN=/Users/mini/gcc14-ppc
 # Host-conditional SDK path (old-mac-build-host#47): imac-2019 runs a sealed
 # system volume (csrutil enabled) -- /Developer can never exist there, real
@@ -361,7 +362,7 @@ EOFTP
     
     # pkgconfig file for openal
     cat > "$PREFIX/lib/pkgconfig/openal.pc" << 'EOFPC'
-prefix=/Users/mini/alephone-ppc-deps
+prefix=/Users/mini/oldmac/alephone/ppc-deps
 exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include

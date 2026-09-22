@@ -35,8 +35,8 @@
 - **Build host deps are host-specific, not interchangeable, even though
   `pick-build-host.sh`'s picker treats every candidate in `BUILD_HOSTS` as
   equally usable.** The PPC/Intel toolchains and dependency prefixes
-  (`/Users/mini/gcc14-ppc`, `/Users/mini/alephone-ppc-deps`,
-  `/Users/mini/alephone-intel-deps`) exist only on `mini-intel`, not
+  (`/Users/mini/gcc14-ppc`, `/Users/mini/oldmac/alephone/ppc-deps`,
+  `/Users/mini/oldmac/alephone/intel-deps`) exist only on `mini-intel`, not
   `mini-intel2` — a plain `./scripts/build.sh ppc` grabs whichever candidate
   is free first and fails cryptically (`ln: .../include/SDL2: No such file
   or directory`) if it lands on the wrong one. When a specific host's state

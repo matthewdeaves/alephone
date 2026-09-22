@@ -24,6 +24,7 @@ if [ "$TARGET" = "ppc" ] || [ "$TARGET" = "x86_64" ]; then
 		echo "[build] claimed build host: $BUILD_HOST"
 	fi
 	trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/pick-build-host.sh" --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
+	BUILD_HOST="$BUILD_HOST" "$REPO_ROOT/scripts/migrate-home-layout.sh"
 fi
 
 mkdir -p "$REPO_ROOT/build"
@@ -32,9 +33,9 @@ case "$TARGET" in
 	ppc)
 		BUILD_HOST="$BUILD_HOST" "$REPO_ROOT/scripts/build-sdl2-ppc.sh"
 		echo "[build] syncing source tree to $BUILD_HOST..."
-		ssh "$BUILD_HOST" 'mkdir -p ~/alephone-build-ppc'
+		ssh "$BUILD_HOST" 'mkdir -p ~/oldmac/alephone/build-ppc'
 		rsync -az --delete $(source_stamp_rsync_excludes "$SOURCE_STAMP_EXCLUDES") \
-			"$REPO_ROOT/" "$BUILD_HOST:~/alephone-build-ppc/"
+			"$REPO_ROOT/" "$BUILD_HOST:~/oldmac/alephone/build-ppc/"
 		# Stamp what was actually rsynced (source_stamp_compute matches the
 		# same exclude list the rsync above used), so `fat` below can tell
 		# a fresh slice from a stale one instead of always rebuilding.
@@ -44,7 +45,7 @@ case "$TARGET" in
 		ssh "$BUILD_HOST" 'bash -s' << 'REMOTE_BUILD'
 set -euo pipefail
 
-cd ~/alephone-build-ppc
+cd ~/oldmac/alephone/build-ppc
 
 # rsync does not preserve autotools' dependency-order mtimes, so the
 # maintainer-mode rules in Makefile.in can decide configure.ac is newer than
@@ -54,7 +55,7 @@ touch -t 202001010000 configure.ac acinclude.m4 $(find . -name '*.m4' -not -name
 touch -t 202001020000 aclocal.m4
 touch -t 202001030000 configure config.h.in $(find . -name Makefile.in)
 
-DEPS=/Users/mini/alephone-ppc-deps
+DEPS=/Users/mini/oldmac/alephone/ppc-deps
 TOOLCHAIN=/Users/mini/gcc14-ppc
 # Host-conditional SDK path (old-mac-build-host#47): imac-2019 runs a sealed
 # system volume (csrutil enabled) -- /Developer can never exist there, real
@@ -171,7 +172,7 @@ make -j2 > /tmp/alephone_ppc_build.log 2>&1 || { tail -50 /tmp/alephone_ppc_buil
 echo "[build] PPC slice build succeeded: $(ls -la Source_Files/alephone)"
 REMOTE_BUILD
 
-		rsync -az "$BUILD_HOST:~/alephone-build-ppc/Source_Files/alephone" "$REPO_ROOT/build/alephone-ppc"
+		rsync -az "$BUILD_HOST:~/oldmac/alephone/build-ppc/Source_Files/alephone" "$REPO_ROOT/build/alephone-ppc"
 		echo "[build] fetched build/alephone-ppc"
 		otool -hv "$REPO_ROOT/build/alephone-ppc"
 		mkdir -p "$REPO_ROOT/build/stamp-ppc"
@@ -184,9 +185,9 @@ REMOTE_BUILD
 
 	x86_64)
 		echo "[build] syncing source tree to $BUILD_HOST..."
-		ssh "$BUILD_HOST" 'mkdir -p ~/alephone-build-x86_64'
+		ssh "$BUILD_HOST" 'mkdir -p ~/oldmac/alephone/build-x86_64'
 		rsync -az --delete $(source_stamp_rsync_excludes "$SOURCE_STAMP_EXCLUDES") \
-			"$REPO_ROOT/" "$BUILD_HOST:~/alephone-build-x86_64/"
+			"$REPO_ROOT/" "$BUILD_HOST:~/oldmac/alephone/build-x86_64/"
 		# See ppc branch above: stamp what was actually rsynced.
 		_stamp_x86_64="$(source_stamp_compute "$REPO_ROOT" "$SOURCE_STAMP_EXCLUDES")"
 
@@ -194,7 +195,7 @@ REMOTE_BUILD
 		ssh "$BUILD_HOST" 'bash -s' << 'REMOTE_BUILD'
 set -euo pipefail
 
-cd ~/alephone-build-x86_64
+cd ~/oldmac/alephone/build-x86_64
 
 # See ppc branch above: force pre-generated-tree mtime order so maintainer-mode
 # rules don't try to regenerate aclocal.m4/configure/Makefile.in with tools
@@ -203,7 +204,7 @@ touch -t 202001010000 configure.ac acinclude.m4 $(find . -name '*.m4' -not -name
 touch -t 202001020000 aclocal.m4
 touch -t 202001030000 configure config.h.in $(find . -name Makefile.in)
 
-DEPS=/Users/mini/alephone-intel-deps
+DEPS=/Users/mini/oldmac/alephone/intel-deps
 TOOLCHAIN=/Users/mini/gcc14-ppc-build/tools/gcc-7.5.0-host
 # alephone#33/#31, manager 14:53: the old sdl2-x86_64 prefix is stock SDL2
 # 2.0.22 built at INTEL_MIN=10.7, so its libSDL2-2.0.0.dylib hard-references
@@ -304,7 +305,7 @@ echo "[build] GCC 7.5 cross-toolchain doesn't run here -- using native clang + H
 # hugging it exactly. This path is therefore NOT a drop-in replacement for
 # the GCC 7.5 path's 10.6 floor -- it's what runs on a host where that path
 # is unavailable at all, which beats no x86_64 build on that host.
-DEPS_NATIVE=~/alephone-intel-deps-native
+DEPS_NATIVE=~/oldmac/alephone/intel-deps-native
 STATICONLY="$DEPS_NATIVE/static-only"
 mkdir -p "$DEPS_NATIVE/lib" "$DEPS_NATIVE/include" "$STATICONLY"
 BOOST="$(brew --prefix boost)"
@@ -415,7 +416,7 @@ fi
 echo "[build] x86_64 slice build succeeded: $(ls -la Source_Files/alephone)"
 REMOTE_BUILD
 
-		rsync -az "$BUILD_HOST:~/alephone-build-x86_64/Source_Files/alephone" "$REPO_ROOT/build/alephone-x86_64"
+		rsync -az "$BUILD_HOST:~/oldmac/alephone/build-x86_64/Source_Files/alephone" "$REPO_ROOT/build/alephone-x86_64"
 		echo "[build] fetched build/alephone-x86_64"
 		otool -hv "$REPO_ROOT/build/alephone-x86_64"
 

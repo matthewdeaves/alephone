@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# check-ppc-symbols.sh - the PPC weak-linking gate (.claude/rules/
+# legacy-mac-hardware.md): every non-weak undefined symbol in the ppc slice
+# must be defined by some library in the Mac OS X 10.3.9 SDK. One 10.4-only
+# symbol links fine on the build host and then dyld aborts at launch on a
+# 10.3.9 G3.
+#
+# usage: scripts/check-ppc-symbols.sh [ppc-binary]   (default build/alephone-ppc)
+# Runs on a build host (it has the ppc-aware cctools nm and the SDK); claims
+# one through the picker unless BUILD_HOST is set by a caller holding it.
+# Static check against SDK stubs, not a launch on real hardware.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIN="${1:-$REPO_ROOT/build/alephone-ppc}"
+[ -f "$BIN" ] || { echo "check-ppc-symbols.sh: $BIN not found" >&2; exit 1; }
+
+BUILD_HOST_CLAIMED=0
+if [ -z "${BUILD_HOST:-}" ]; then
+	export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-alephone.symcheck.$$.$(date +%s)}"
+	BUILD_HOST="$(BUILD_LOCK_WAIT="${BUILD_LOCK_WAIT:-900}" \
+		"$REPO_ROOT/scripts/pick-build-host.sh" --acquire "alephone ppc symbol check")" || {
+		echo "check-ppc-symbols.sh: no free build host" >&2
+		exit 1
+	}
+	BUILD_HOST_CLAIMED=1
+fi
+trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/pick-build-host.sh" --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
+
+ssh "$BUILD_HOST" 'mkdir -p ~/oldmac/alephone/symcheck'
+scp -q "$BIN" "$BUILD_HOST:oldmac/alephone/symcheck/bin"
+
+ssh "$BUILD_HOST" 'bash -s' << 'REMOTE_CHECK'
+set -euo pipefail
+W=~/oldmac/alephone/symcheck
+trap 'rm -rf "$W"' EXIT
+NM=~/gcc14-ppc/bin/powerpc-apple-darwin8-nm
+[ -x "$NM" ] || { echo "check-ppc-symbols: no ppc nm at $NM" >&2; exit 1; }
+if [ -d /Developer/SDKs/MacOSX10.3.9.sdk ]; then SDK=/Developer/SDKs/MacOSX10.3.9.sdk
+elif [ -d ~/SDKs/MacOSX10.3.9.sdk ]; then SDK=~/SDKs/MacOSX10.3.9.sdk
+else echo "check-ppc-symbols: no MacOSX10.3.9 SDK" >&2; exit 1; fi
+
+# Every symbol any 10.3.9 SDK library defines (a superset of what is
+# linked; the question here is only "does it exist on 10.3.9 at all").
+find "$SDK/usr/lib" "$SDK/System/Library/Frameworks" -type f \( -name '*.dylib' -o -perm -u+x \) 2>/dev/null |
+	while read -r lib; do "$NM" -gU "$lib" 2>/dev/null; done |
+	awk 'NF >= 3 {print $NF}' | sort -u > "$W/defined"
+
+"$NM" -m "$W/bin" | awk '/\(undefined\)/ && !/weak external/ {
+	for (i = 1; i < NF; i++) if ($i == "external") { print $(i + 1); break } }' | sort -u > "$W/strong"
+weak=$("$NM" -m "$W/bin" | grep -c '(undefined) weak external' || true)
+missing=$(comm -23 "$W/strong" "$W/defined")
+
+echo "check-ppc-symbols: $(wc -l < "$W/strong" | tr -d ' ') strong undefined, $weak weak, against $(wc -l < "$W/defined" | tr -d ' ') 10.3.9 SDK symbols ($SDK)"
+if [ -n "$missing" ]; then
+	echo "check-ppc-symbols: FAIL -- not in the 10.3.9 SDK:" >&2
+	echo "$missing" | sed 's/^/  /' >&2
+	exit 1
+fi
+echo "check-ppc-symbols: PASS"
+REMOTE_CHECK

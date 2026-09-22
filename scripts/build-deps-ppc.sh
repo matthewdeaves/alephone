@@ -55,7 +55,13 @@ fi
 JOBS=2
 
 SDL_PREFIX=/Users/mini/oldmac/alephone/sdl2-ppc-tiger103
-test -x "$SDL_PREFIX/bin/sdl2-config" && test -f "$SDL_PREFIX/lib/libSDL2.a"
+# No fallback to the shared ~/oldmac/sdl2-ppc-* prefixes: they lack this
+# port's G3/Panther patches (#36). An `a && b` list does not trip set -e when
+# `a` fails, so check explicitly.
+if [ ! -x "$SDL_PREFIX/bin/sdl2-config" ] || [ ! -f "$SDL_PREFIX/lib/libSDL2.a" ]; then
+	echo "build-deps-ppc.sh: private SDL2 prefix missing at $SDL_PREFIX (build-sdl2-ppc.sh should have built it)" >&2
+	exit 1
+fi
 
 TAR=tar
 [ -x /Users/mini/local/bin/gtar ] && TAR=/Users/mini/local/bin/gtar

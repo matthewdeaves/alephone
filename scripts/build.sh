@@ -70,7 +70,11 @@ else
 	exit 1
 fi
 		SDL_DIR=/Users/mini/oldmac/alephone/sdl2-ppc-tiger103
-		test -x "$SDL_DIR/bin/sdl2-config" && test -f "$SDL_DIR/lib/libSDL2.a"
+		# Explicit check: an `a && b` list does not trip set -e when `a` fails (#36).
+		if [ ! -x "$SDL_DIR/bin/sdl2-config" ] || [ ! -f "$SDL_DIR/lib/libSDL2.a" ]; then
+			echo "build.sh: private SDL2 prefix missing at $SDL_DIR (run scripts/build-sdl2-ppc.sh)" >&2
+			exit 1
+		fi
 
 # Ensure SDL2 headers accessible as <SDL2/SDL.h> and <SDL.h>
 ln -sf "$SDL_DIR/include/SDL2" "$DEPS/include/SDL2"

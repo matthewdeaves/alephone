@@ -10,21 +10,31 @@ Mac OS X 10.3.9 all the way up to a current Apple Silicon Mac.
 | Slice    | Minimum OS | Covers                                    |
 |----------|------------|--------------------------------------------|
 | `ppc`    | 10.3.9     | G3 / G4 / G5 (no AltiVec assumed)          |
-| `i386`   | 10.4.4     | Early Intel Macs (Core Duo/Solo) → 10.14   |
-| `x86_64` | 10.5+      | Core 2 Duo and later, current macOS        |
+| `i386`   | 10.4.4     | Early Intel Macs (Core Duo/Solo) → 10.14 — **not shipped yet**, see below |
+| `x86_64` | 10.5+      | Core 2 Duo and later, current macOS — **currently 10.6+**, see below |
 | `arm64`  | 11.0+      | Apple Silicon (M1 and later), current macOS |
 
-One universal binary, one download, all four architectures. The `ppc`/`i386`/`x86_64`
-trio matches what Aleph One itself shipped from 2011–2015 before that build was dropped
+One universal binary, one download. Two declared targets are not met by the current
+release, and are tracked rather than dropped:
+
+- **`i386` is not in the binary yet** ([#30](https://github.com/matthewdeaves/alephone/issues/30)).
+  No build host has an i386 compiler with the C++17 support the engine needs. A Core
+  Duo/Solo Mac has nothing to run until that toolchain exists.
+- **`x86_64` is built for 10.6, not 10.5** ([#31](https://github.com/matthewdeaves/alephone/issues/31)).
+  Verified on real 10.6.8 hardware; 10.5 on Intel is untested (no such Mac in the test fleet)
+  and not expected to work with this build.
+
+The `ppc`/`i386`/`x86_64` trio matches what Aleph One itself shipped from 2011–2015 before that build was dropped
 for unrelated reasons (see `PORTING-PPC.md`); `arm64` is new here. Unlike the other
 three, it isn't legacy-constrained — it's built natively and tracks the engine's
 current dependency versions rather than the old pins the other slices need.
 
 ## What's different from upstream
 
-- Fat `ppc`/`i386`/`x86_64`/`arm64` build in one binary (upstream ships arm64/x86_64
-  as separate downloads, no PowerPC or 32-bit Intel at all). `ppc`/`i386`/`x86_64`
-  cross-compile with a pinned GCC 14 → PowerPC toolchain; `arm64` builds natively.
+- Fat `ppc`/`x86_64`/`arm64` build in one binary, with `i386` to follow (upstream ships
+  arm64/x86_64 as separate downloads, no PowerPC or 32-bit Intel at all). `ppc`
+  cross-compiles with a pinned GCC 14 → PowerPC toolchain and `x86_64` with GCC 7.5;
+  `arm64` builds natively.
 - Real hardware-accelerated OpenGL by default on every supported Mac, G3 and up —
   including GPUs with no shader support at all (falls back to the classic
   fixed-function GL path, still on the GPU) and GPUs whose driver falsely claims

@@ -238,6 +238,8 @@ fi
 
 if [ "$_old_toolchain_works" = 1 ]; then
 echo "[build] using GCC 7.5 cross-toolchain (10.6 floor)"
+# Tell the local dylib fetch below which prefix this branch linked (#38).
+printf '%s\n' "$SDL_DIR" > ~/oldmac/alephone/build-x86_64/.sdl-dir
 
 # Ensure SDL2 headers accessible as <SDL2/SDL.h> and <SDL.h>
 ln -sf "$SDL_DIR/include/SDL2" "$DEPS/include/SDL2"
@@ -288,6 +290,11 @@ make -j2 > /tmp/alephone_intel_build.log 2>&1 || { tail -50 /tmp/alephone_intel_
 
 else
 echo "[build] GCC 7.5 cross-toolchain doesn't run here -- using native clang + Homebrew (10.9 floor)"
+# #38: the 10.6-floor sdl2-snow-x86_64 prefix only exists where the GCC 7.5
+# path runs (mini-intel). This path's own floor is 10.9, so the 10.7-floor
+# prefix every Intel build host has is the right one here.
+SDL_DIR=/Users/mini/oldmac/sdl2-x86_64
+printf '%s\n' "$SDL_DIR" > ~/oldmac/alephone/build-x86_64/.sdl-dir
 
 # alephone#15. Deliberately NOT the same recipe as the GCC 7.5 path: this is
 # native compilation (imac-2019 IS x86_64), so there is no reason to route
@@ -442,11 +449,16 @@ REMOTE_BUILD
 		# Got out of sync exactly once already: $SDL_DIR was repointed at
 		# sdl2-snow-x86_64 (the 10.6-floor prefix, #33/#31) but this fetch
 		# kept pulling the old 10.7 one, silently shipping the wrong dylib
-		# with no error anywhere in the build log. Keep these two paths
-		# equal by hand until/unless this gets refactored to pass SDL_DIR
-		# through explicitly.
+		# with no error anywhere in the build log. #38: the remote build now
+		# records the prefix it actually linked in .sdl-dir (the two x86_64
+		# branches use different ones), and the load command to retarget is
+		# read from the binary itself -- no second copy of the path here.
+		_sdl_dir="$(ssh "$BUILD_HOST" 'cat ~/oldmac/alephone/build-x86_64/.sdl-dir')"
+		_sdl_ref="$(otool -L "$REPO_ROOT/build/alephone-x86_64" | awk '/libSDL2-2\.0\.0\.dylib/ {print $1; exit}')"
+		[ -n "$_sdl_dir" ] && [ -n "$_sdl_ref" ] || {
+			echo "build.sh: could not determine the linked SDL2 prefix/load command" >&2; exit 1; }
 		mkdir -p "$REPO_ROOT/build/deps-x86_64"
-		scp -q "$BUILD_HOST:/Users/mini/oldmac/sdl2-snow-x86_64/lib/libSDL2-2.0.0.dylib" \
+		scp -q "$BUILD_HOST:$_sdl_dir/lib/libSDL2-2.0.0.dylib" \
 			"$REPO_ROOT/build/deps-x86_64/libSDL2-2.0.0.dylib"
 		echo "[build] fetched build/deps-x86_64/libSDL2-2.0.0.dylib"
 
@@ -455,7 +467,7 @@ REMOTE_BUILD
 		# cannot parse the PPC cross-compiled slice's load commands at all
 		# ("malformed load command 0 (cmdsize is zero)", measured 2026-08-28)
 		# and aborts on the whole fat file once ppc is lipo'd in.
-		install_name_tool -change /Users/mini/oldmac/sdl2-snow-x86_64/lib/libSDL2-2.0.0.dylib \
+		install_name_tool -change "$_sdl_ref" \
 			@executable_path/../Frameworks/libSDL2-2.0.0.dylib \
 			"$REPO_ROOT/build/alephone-x86_64"
 		echo "[build] retargeted libSDL2 load command to @executable_path"

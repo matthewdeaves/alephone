@@ -60,8 +60,11 @@ r=1
 while [ "$r" -le "$ROUNDS" ]; do
 	for target in 30 60 0; do
 		log="$W/r$r-t$target.log"
+		# exec, so $! is the game itself: stop() used to kill only this
+		# subshell and leave the game running into the next run (and into
+		# the next claimant's session).
 		( cd "$APP_DIR" && HOME="$W/home" ALEPHONE_FPS_LOG=5 ALEPHONE_FPS_TARGET=$target \
-			"$EXEC" -s --no-chooser -Q "$DATA" "$FILM" > "$log" 2>&1 < /dev/null ) &
+			exec "$EXEC" -s --no-chooser -Q "$DATA" "$FILM" > "$log" 2>&1 < /dev/null ) &
 		pid=$!
 		sleep "$SECS"
 		alive=yes; kill -0 "$pid" 2>/dev/null || alive=no

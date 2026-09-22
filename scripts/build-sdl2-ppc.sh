@@ -23,6 +23,9 @@ PIN=1b299830ce15b9d4e8bf7bee3c14436ed5376506
 BUILD_HOST_CLAIMED=0
 
 if [ -z "${BUILD_HOST:-}" ]; then
+	# Without an exported claim, the EXIT-trap release falls back to identity
+	# matching and can drop another alephone session's claim (build-host#7).
+	export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-alephone.sdl2ppc.$$.$(date +%s)}"
 	BUILD_HOST="$(BUILD_LOCK_WAIT="${BUILD_LOCK_WAIT:-900}" \
 		"$REPO_ROOT/scripts/pick-build-host.sh" --acquire "alephone SDL2 PPC")" || {
 		echo "build-sdl2-ppc.sh: no free Intel build host" >&2

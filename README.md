@@ -36,22 +36,17 @@ the Marathon 2 demo on a Core 2 Mac mini, using classic OpenGL).
   as separate downloads, with no PowerPC or 32-bit Intel). `ppc` and `i386`
   cross-compile with pinned GCC 14 toolchains, `x86_64` with GCC 7.5, and `arm64`
   builds natively.
-- Real hardware-accelerated OpenGL by default on every supported Mac, G3 and up —
-  including GPUs with no shader support at all (falls back to the classic
-  fixed-function GL path, still on the GPU) and GPUs that claim shader support
-  they can't run at speed (Radeon 9600, GMA 950: measured, then set to classic GL).
-  First-run graphics defaults are picked from the GL capabilities found at runtime. A software renderer is still
-  available as a manual option (Preferences → Graphics) or automatic last-resort
-  fallback if OpenGL context creation fails outright, same as upstream.
+- Hardware OpenGL by default on every supported Mac. GPUs without shader support,
+  or measured too slow with it (Radeon 9600, GMA 950), use the classic
+  fixed-function renderer. First-run graphics defaults come from the GL
+  capabilities found at runtime. The software renderer remains a manual option
+  and the fallback if no GL context can be created.
 - Host or join a network game through your own private dedicated server, not just
   the official public server list — see `SERVER.md` (deployment lives in
   [retro-server-infra](https://github.com/matthewdeaves/retro-server-infra)).
-- Dependency versions pinned specifically for old-hardware correctness — e.g. boost
-  1.76.0 (not 1.90 — PPC regression) and openal-soft 1.23.1 (not 1.24+ — broken
-  AltiVec SIMD on big-endian).
-- Real bugs found and fixed on real hardware: PPC toolchain miscompilations, dyld
-  weak-symbol collisions with system libraries, and a GPU driver that silently ran
-  shaders in software instead of on the GPU. Full write-ups in `BUGFIXES.md`.
+- Pinned dependencies: boost 1.76.0 (1.90 regresses on PPC) and openal-soft 1.23.1
+  (1.24+ has broken AltiVec SIMD on big-endian).
+- Fixes for bugs found on real hardware are listed in `BUGFIXES.md`.
 
 ## Downloads
 
@@ -59,14 +54,6 @@ Prebuilt DMGs are on the [Releases page](https://github.com/matthewdeaves/alepho
 Game data (Marathon/Marathon 2/Infinity) is included via git submodules — clone with
 `--recurse-submodules`, or see upstream's build instructions below for a from-scratch
 build.
-
-## How this was built
-
-Development is an automated AI loop, Claude Code under my direction: implement,
-build, deploy to real hardware, run it there, iterate. Bugs are found and fixed
-against real G3/G4/G5 Macs on Panther, Tiger, and Leopard, using crash reports and
-CPU profiling from that hardware. `BUGFIXES.md` logs what broke and how it was
-fixed.
 
 ## Building from source
 

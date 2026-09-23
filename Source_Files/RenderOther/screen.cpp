@@ -1051,6 +1051,16 @@ static void change_screen_mode(int width, int height, int depth, bool nogl, bool
 		// don't add them here without the same real-hardware measurement.
 		// ALEPHONE_FORCE_CLASSIC_GL=1 remains as a manual override for
 		// testing further suspect GPUs without a code change.
+		//
+		// alephone#39/#30, 2026-09-23: Intel GMA 950 (GL_VERSION 1.4, the
+		// GPU in every Core Solo/Duo Mac and the early Core 2 minis) is
+		// the second confirmed card. It advertises the GLSL extensions but
+		// has no hardware vertex shaders. Interleaved film replays on
+		// mini-intel (Lion, 800x600, uncapped, 2 rounds, both x86_64 and
+		// i386): shader 0.6-1.8 fps with 0.9-1.8 s frames, classic
+		// 6.8-6.9 fps with ~150 ms frames. Both confirmed cards report a
+		// pre-2.0 GL core with GLSL only as extensions; whether that rule
+		// holds more widely is for the fleet benches, not a guess here.
 		bool known_bad_shader_gpu = false;
 #ifdef HAVE_OPENGL
 		// glGetString/GL_RENDERER need real GL headers, only pulled in
@@ -1059,7 +1069,7 @@ static void change_screen_mode(int width, int height, int depth, bool nogl, bool
 		// config, "GL_RENDERER was not declared in this scope").
 		{
 			const char *renderer = (const char *) glGetString(GL_RENDERER);
-			if (renderer && strstr(renderer, "Radeon 9600") != NULL) {
+			if (renderer && (strstr(renderer, "Radeon 9600") != NULL || strstr(renderer, "GMA 950") != NULL)) {
 				known_bad_shader_gpu = true;
 			}
 		}

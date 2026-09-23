@@ -3,6 +3,15 @@
 One short entry per real bug fixed in this fork: what it was, what the fix was.
 Newest first.
 
+- **Intel GMA 950 Macs ran at about 1 fps by default** (alephone#39/#30).
+  The GPU advertises GLSL, so the shader renderer was chosen, but it has no
+  hardware vertex shaders (GL 1.4). Interleaved film replays on mini-intel
+  (Lion, 800x600, uncapped, 2 rounds, x86_64 and i386): shader 0.6-1.8 fps
+  with 0.9-1.8 s frames, classic fixed-function 6.8-6.9 fps with ~150 ms
+  frames. Added "GMA 950" to the measured list of GPUs that get classic GL
+  (next to "Radeon 9600"). That covers every Core Solo/Duo Mac the i386
+  slice exists for.
+
 - **Passing a film (or any file) on the command line hung macOS startup
   before the window opened** (alephone#39). The app sat frontmost with only a
   menu bar and ignored Quit, which blocked the fps benches. `sample` showed

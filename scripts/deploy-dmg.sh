@@ -63,16 +63,15 @@ DEPLOYED_LIST="$DEPLOY_ROOT/deployed-apps.$$"
 # ships each game's data (Map.scen, Shapes.shps, Sounds.sndz, Physics.phys,
 # Music/, Plugins/, Scripts/) as siblings of the .app, not inside it -- same
 # as what a real drag-to-Applications of a mounted DMG folder would carry over.
-# Fleet rule (old-mac-build-host tidy, 2026-09-22): no rollback copies left
-# behind. Once the new bundle's executable is in place, delete this run's
-# backup; keep it (and say so) only if the new install can't be verified.
-drop_backup () {
-	[ -n "$1" ] || return 0
-	if ls "$2"/Contents/MacOS/* >/dev/null 2>&1; then
-		rm -rf "$1"
-		echo "[deploy] new install verified; removed rollback copy"
-	else
-		echo "[deploy] WARNING: could not verify $2, kept rollback copy at $1" >&2
+# Fix forward (user rule, 2026-09-23, briefs 5737ef5): no rollback, backup
+# or .bak copy anywhere. The old install is moved aside only for the swap and
+# always deleted afterwards. A bad install is fixed by redeploying a fixed
+# build, never by restoring the old one.
+drop_old () {
+	[ -n "$1" ] && rm -rf "$1"
+	if ! ls "$2"/Contents/MacOS/* >/dev/null 2>&1; then
+		echo "[deploy] ERROR: could not verify $2 after install; redeploy a good build" >&2
+		exit 1
 	fi
 }
 for app in "$MOUNT"/*/*.app; do
@@ -88,22 +87,18 @@ for app in "$MOUNT"/*/*.app; do
 	# carries it -- this deploy path (scp) never sets it, but the DMG's
 	# staged content could, so clear it explicitly rather than assume.
 	ditto "$src" "$stage"
-	# Prune any backup(s) left by a PRIOR deploy run before making this run's:
-	# the fleet-wide rule is that rollback copies are pruned once the new
-	# install verifies, and by the time a later deploy runs, the previous
-	# one already has (a human or smoke-dmg.sh has had the chance to use
-	# it). Without this, every routine re-deploy leaves one more full copy
-	# on disk forever.
+	# Clear anything an older version of this script left behind.
 	rm -rf "$DEPLOY_ROOT"/previous-"$name".* 2>/dev/null
 	if [ -e "$dest" ]; then
 		backup="$DEPLOY_ROOT/previous-${name}.$$"
 		mv "$dest" "$backup"
 	fi
 	if ! mv "$stage" "$dest"; then
-		[ -n "$backup" ] && mv "$backup" "$dest"
+		rm -rf "$backup" "$stage"
+		echo "[deploy] ERROR: could not move the new install into $dest; redeploy" >&2
 		exit 1
 	fi
-	drop_backup "$backup" "$dest/$(basename "$app")"
+	drop_old "$backup" "$dest/$(basename "$app")"
 	echo "[deploy] installed $dest/"
 	echo "$dest/$(basename "$app")" >> "$DEPLOYED_LIST"
 done
@@ -116,17 +111,17 @@ for app in "$MOUNT"/*.app; do
 	stage="$DEPLOY_ROOT/install-${name}.$$"
 	backup=""
 	ditto "$app" "$stage"
-	# See the matching comment in the sibling-data-folder loop above.
 	rm -rf "$DEPLOY_ROOT"/previous-"$name".* 2>/dev/null
 	if [ -e "$dest" ]; then
 		backup="$DEPLOY_ROOT/previous-${name}.$$"
 		mv "$dest" "$backup"
 	fi
 	if ! mv "$stage" "$dest"; then
-		[ -n "$backup" ] && mv "$backup" "$dest"
+		rm -rf "$backup" "$stage"
+		echo "[deploy] ERROR: could not move the new install into $dest; redeploy" >&2
 		exit 1
 	fi
-	drop_backup "$backup" "$dest"
+	drop_old "$backup" "$dest"
 	echo "[deploy] installed $dest"
 	echo "$dest" >> "$DEPLOYED_LIST"
 done

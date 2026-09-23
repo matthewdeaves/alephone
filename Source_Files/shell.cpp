@@ -237,6 +237,10 @@ void initialize_application(void)
 	SDL_setenv("SDL_AUDIODRIVER", "directsound", 0);
 #endif
 
+#if defined(__APPLE__) && defined(__MACH__)
+	system_disable_argv_document_open();
+#endif
+
 	// Initialize SDL
 	const Uint32 base_flags = SDL_INIT_VIDEO |
 							  (shell_options.nosound ? 0 : SDL_INIT_AUDIO) |

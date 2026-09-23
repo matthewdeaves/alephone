@@ -53,6 +53,11 @@ extern bool alert_choose_scenario(char *chosen_dir);
 
 extern void launch_url_in_browser(const char *url);
 
+#if defined(__APPLE__) && defined(__MACH__)
+// Call before SDL_Init: stop AppKit opening argv entries as documents (alephone#39)
+extern void system_disable_argv_document_open();
+#endif
+
 extern void pause_debug(void);
 extern void vpause(
 	const char *message);

@@ -3,6 +3,22 @@
 One short entry per real bug fixed in this fork: what it was, what the fix was.
 Newest first.
 
+- **Passing a film (or any file) on the command line hung macOS startup
+  before the window opened** (alephone#39). The app sat frontmost with only a
+  menu bar and ignored Quit, which blocked the fps benches. `sample` showed
+  the main thread inside `SDL_Init`: SDL's `Cocoa_RegisterApp` calls
+  `[NSApp finishLaunching]` before it installs its app delegate, so AppKit
+  treated argv entries as documents with no delegate to claim them.
+  `NSDocumentController` then failed on the Info.plist's empty
+  `NSDocumentClass` and ran a modal error alert that never drew. Fixed by
+  registering `NSTreatUnknownArgumentsAsOpen=NO` before `SDL_Init`
+  (`system_disable_argv_document_open`, csalerts_darwin.cpp). Aleph One
+  already opens its own argv files. This uses plain objc-runtime C calls,
+  because the PPC toolchain has no Objective-C and the 10.3.9 SDK's
+  objc-runtime.h isn't valid C++. A/B on imac-2019 with the same command:
+  v1.1.0 stuck in `runModal` with 0 fps windows, fixed build replayed the
+  film (114 fps, tier 2).
+
 - **Release candidate could not launch at all on modern macOS whenever the
   fat binary included a ppc slice** (alephone#34), found running the
   imac-2019 (Sequoia) smoke check `CLAUDE.md` requires before any release.

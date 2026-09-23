@@ -92,6 +92,10 @@ REMOTE_BUILD
 
 echo "[sdl2-i386] copying the prefix to $LINK_HOST..."
 rsync -a "$BUILD_HOST:$PREFIX/" "$TMP/prefix/"
+# One claim at a time (fleet rule 4a1e530): drop the build host before
+# taking the link host, never hold one while waiting for the other.
+for h in $CLAIMED; do "$REPO_ROOT/scripts/pick-bench-host.sh" --release "$h" >/dev/null 2>&1; done
+CLAIMED=""
 claim "$LINK_HOST"
 ssh "$LINK_HOST" "rm -rf '$PREFIX' && mkdir -p '$(dirname "$PREFIX")'"
 rsync -a "$TMP/prefix/" "$LINK_HOST:$PREFIX/"

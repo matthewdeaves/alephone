@@ -17,6 +17,10 @@ if [ "$TARGET" = "ppc" ] || [ "$TARGET" = "x86_64" ] || [ "$TARGET" = "i386" ]; 
 	# mini-intel2, so i386 always picks from that one host, whatever
 	# BUILD_HOSTS a caller set for the other slices.
 	[ "$TARGET" = "i386" ] && export BUILD_HOSTS="${ALEPHONE_I386_BUILD_HOSTS:-mini-intel2}"
+	# i386's SDL leg (imac-2019, then a copy to mini-intel2) takes and drops
+	# its own claims first, so this run never holds one claim while waiting
+	# for another (fleet rule 4a1e530). A no-op when the prefix is current.
+	[ "$TARGET" = "i386" ] && [ -z "${BUILD_HOST:-}" ] && "$REPO_ROOT/scripts/build-sdl2-i386.sh"
 	if [ -z "${BUILD_HOST:-}" ]; then
 		export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-$$.$(date +%s).${RANDOM:-0}}"
 		BUILD_HOST="$(BUILD_LOCK_WAIT="${BUILD_LOCK_WAIT:-900}" \
@@ -190,9 +194,8 @@ REMOTE_BUILD
 		# the 10.4 floor from scripts/build-sdl2-i386.sh (deps' SDL#7 fork,
 		# built with Apple clang). Nothing to bundle: like ppc, the slice
 		# carries its own SDL.
-		# This run already holds $BUILD_HOST; tell the SDL script so it only
-		# claims its own build host (a second claim here would deadlock).
-		RETRO_BENCH_LOCK="$BUILD_HOST" ALEPHONE_I386_LINK_HOST="$BUILD_HOST" "$REPO_ROOT/scripts/build-sdl2-i386.sh"
+		# The SDL prefix is prepared before this run claims mini-intel2 (see
+		# the top of this script): never hold one claim while taking another.
 		echo "[build] syncing source tree to $BUILD_HOST..."
 		ssh "$BUILD_HOST" 'mkdir -p ~/oldmac/alephone/build-i386'
 		rsync -az --delete $(source_stamp_rsync_excludes "$SOURCE_STAMP_EXCLUDES") \

@@ -11,7 +11,7 @@
 # ~/oldmac/alephone/bench, so the player's own preferences are never read
 # or written; the first run there is a first run, so the log also shows the
 # GL tier this Mac gets. Claims the host through pick-bench-host.sh and
-# terminates every run the same escalating way smoke-direct-exec.sh does.
+# terminates every run with the same quit, TERM, KILL escalation as smoke-dmg.sh.
 
 set -euo pipefail
 
@@ -35,7 +35,7 @@ trap '"$REPO_ROOT/scripts/pick-bench-host.sh" --release "$HOST" >/dev/null 2>&1;
 }
 
 ssh "$HOST" bash -s -- "$ROUNDS" "$SECS" << 'REMOTE_BENCH'
-# No pipefail: Tiger's /bin/bash 2.05b rejects it (see smoke-direct-exec.sh).
+# No pipefail: Tiger's /bin/bash 2.05b rejects it.
 set -u
 ROUNDS="$1"; SECS="$2"
 APP_DIR="/Applications/Aleph One"

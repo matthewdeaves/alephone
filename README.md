@@ -22,9 +22,10 @@ They are tracked, not dropped:
 - **`x86_64` needs 10.6, not 10.5** ([#31](https://github.com/matthewdeaves/alephone/issues/31)).
   Same gap: no Intel Mac running 10.5 to test on.
 
-**Tested for v1.2.0-rc1** on real hardware so far: G3 (10.3.9), a Core 2 Mac mini
-(10.7.5, `i386` too via `arch -i386`), a 2019 iMac (macOS 15) and an M5 Mac (macOS 26).
-The rest of the fleet (G3/G4/G5 on 10.4-10.5, 10.6) is listed in the release notes as it lands.
+**Tested for v1.2.0** on real hardware: G3 (10.3.9, 10.4.11), G4 Mac mini (10.4.11),
+G5 (10.3.9, 10.4.11, 10.5.8), Core 2 Mac minis (10.6.8, 10.7.5; `i386` via `arch -i386`),
+a 2019 iMac (macOS 15) and an M5 Mac (macOS 26); played by hand on the G3 and G5.
+No 32-bit-only Core Solo/Duo Mac, or Intel Mac on 10.4/10.5, is in the fleet.
 
 **Known issues:** early Intel Macs with GMA 950 graphics are slow (about 7 fps in
 the Marathon 2 demo on a Core 2 Mac mini, using classic OpenGL).

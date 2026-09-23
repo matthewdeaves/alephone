@@ -4,15 +4,15 @@
 
 | Machine | OS | Role |
 |---|---|---|
-| **G5** | **Tiger 10.4** | **PRIMARY BUILD HOST.** Fastest PPC box; GCC bootstrap is ~4 staged builds |
-| G5 | Panther 10.3 | Test target — where the 10.3.9 weak-linking trap actually bites |
-| G4 mini | Tiger 10.4 | Test target (Callahan's reference machine for this exact recipe) |
-| G3 | 10.3 / 10.4 | Test target — **no AltiVec**, proves the baseline `ppc` slice |
-| Intel Mac | 10.6 if possible | i386 + x86_64 slices, via Xcode 3.2.6 |
-| Modern Mac | current | `lipo` the slices together; git; cross work |
+| mini-intel (Core 2) | Lion 10.7 | Builds `ppc` (GCC 14 cross, 10.3.9 SDK) and `x86_64` (GCC 7.5, 10.6 floor) |
+| mini-intel2 (Core 2) | Lion 10.7 | Builds `i386` (GCC 14 i686 cross, 10.4u SDK; deps via `scripts/build-deps-i386.sh`) |
+| imac-2019 | macOS 15 | Builds the i386 SDL2 (`scripts/build-sdl2-i386.sh`: Apple clang, 10.4u SDK) |
+| G3 / G4 mini / G5 | 10.3.9–10.5.8 | Test targets; Panther is where the 10.3.9 weak-linking trap bites |
+| Core 2 minis, imac-2019 | 10.6–15 | Intel test targets (`i386` via `arch -i386` on 10.6/10.7) |
+| Workstation (Apple Silicon) | current | Builds `arm64` natively; fuses slices with `llvm-lipo`; packages the DMG |
 
-**Do NOT install Xcode on the Panther machines.** We build on Tiger and *target*
-10.3.9 via the 10.3.9 SDK included with Xcode 2.5. Panther boxes are test targets.
+**Do NOT install Xcode on the Panther machines.** Everything targets 10.3.9 through
+the 10.3.9 SDK from Xcode 2.5; Panther boxes are test targets only.
 
 ## From Apple (developer.apple.com/download/all/, free Apple ID)
 

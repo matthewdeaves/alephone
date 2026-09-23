@@ -10,51 +10,48 @@ Mac OS X 10.3.9 all the way up to a current Apple Silicon Mac.
 | Slice    | Minimum OS | Covers                                    |
 |----------|------------|--------------------------------------------|
 | `ppc`    | 10.3.9     | G3 / G4 / G5 (no AltiVec assumed)          |
-| `i386`   | 10.4.4     | Early Intel Macs (Core Duo/Solo) → 10.14 — **not shipped yet**, see below |
-| `x86_64` | 10.5+      | Core 2 Duo and later, current macOS — **currently 10.6+**, see below |
-| `arm64`  | 11.0+      | Apple Silicon (M1 and later), current macOS |
+| `i386`   | 10.4.4     | Core Solo / Core Duo Macs (see below)      |
+| `x86_64` | 10.6       | Core 2 Duo and later, current macOS (declared 10.5, see below) |
+| `arm64`  | 11.0       | Apple Silicon (M1 and later)               |
 
-One universal binary, one download. Two declared targets are not met by the current
-release, and are tracked rather than dropped:
+One universal binary, one download. Two declared targets are not fully proven yet.
+They are tracked, not dropped:
 
-- **`i386` is not in the binary yet** ([#30](https://github.com/matthewdeaves/alephone/issues/30)).
-  No build host has an i386 compiler with the C++17 support the engine needs. A Core
-  Duo/Solo Mac has nothing to run until that toolchain exists.
-- **`x86_64` is built for 10.6, not 10.5** ([#31](https://github.com/matthewdeaves/alephone/issues/31)).
-  Verified on real 10.6.8 hardware; 10.5 on Intel is untested (no such Mac in the test fleet)
-  and not expected to work with this build.
+- **`i386` is built for 10.4.4 but has only run on 10.7** ([#30](https://github.com/matthewdeaves/alephone/issues/30)).
+  The test fleet has no Intel Mac running 10.4 or 10.5.
+- **`x86_64` needs 10.6, not 10.5** ([#31](https://github.com/matthewdeaves/alephone/issues/31)).
+  Same gap: no Intel Mac running 10.5 to test on.
 
-The `ppc`/`i386`/`x86_64` trio matches what Aleph One itself shipped from 2011–2015 before that build was dropped
-for unrelated reasons (see `PORTING-PPC.md`); `arm64` is new here. Unlike the other
-three, it isn't legacy-constrained — it's built natively and tracks the engine's
-current dependency versions rather than the old pins the other slices need.
+**Tested for this release** on real hardware: G3 (10.3.9, 10.4.11), G4 Mac mini
+(10.4.11), G5 (10.3.9, 10.4.11, 10.5.8), Core 2 Mac minis (10.6.8, 10.7.5; `i386`
+checked on 10.7.5 with `arch -i386`), a 2019 iMac (macOS 15) and an M5 Mac (macOS 26).
+No 32-bit-only Core Solo/Duo Mac is in the fleet.
+
+**Known issues:** early Intel Macs with GMA 950 graphics are slow (about 7 fps in
+the Marathon 2 demo on a Core 2 Mac mini, using classic OpenGL).
 
 ## What's different from upstream
 
-- Fat `ppc`/`x86_64`/`arm64` build in one binary, with `i386` to follow (upstream ships
-  arm64/x86_64 as separate downloads, no PowerPC or 32-bit Intel at all). `ppc`
-  cross-compiles with a pinned GCC 14 → PowerPC toolchain and `x86_64` with GCC 7.5;
-  `arm64` builds natively.
+- Fat `ppc`/`i386`/`x86_64`/`arm64` build in one binary (upstream ships arm64/x86_64
+  as separate downloads, with no PowerPC or 32-bit Intel). `ppc` and `i386`
+  cross-compile with pinned GCC 14 toolchains, `x86_64` with GCC 7.5, and `arm64`
+  builds natively.
 - Real hardware-accelerated OpenGL by default on every supported Mac, G3 and up —
   including GPUs with no shader support at all (falls back to the classic
-  fixed-function GL path, still on the GPU) and GPUs whose driver falsely claims
-  shader support it can't actually run in hardware. A software renderer is still
+  fixed-function GL path, still on the GPU) and GPUs that claim shader support
+  they can't run at speed (Radeon 9600, GMA 950: measured, then set to classic GL).
+  First-run graphics defaults are picked from the GL capabilities found at runtime. A software renderer is still
   available as a manual option (Preferences → Graphics) or automatic last-resort
   fallback if OpenGL context creation fails outright, same as upstream.
 - Host or join a network game through your own private dedicated server, not just
-  the official public server list — see `SERVER.md`.
+  the official public server list — see `SERVER.md` (deployment lives in
+  [retro-server-infra](https://github.com/matthewdeaves/retro-server-infra)).
 - Dependency versions pinned specifically for old-hardware correctness — e.g. boost
   1.76.0 (not 1.90 — PPC regression) and openal-soft 1.23.1 (not 1.24+ — broken
   AltiVec SIMD on big-endian).
 - Real bugs found and fixed on real hardware: PPC toolchain miscompilations, dyld
   weak-symbol collisions with system libraries, and a GPU driver that silently ran
   shaders in software instead of on the GPU. Full write-ups in `BUGFIXES.md`.
-
-## Dedicated server
-
-Details on hosting your own game (the client feature above) are in `SERVER.md`.
-The actual server deployment/infra lives in the separate
-[retro-server-infra](https://github.com/matthewdeaves/retro-server-infra) repo.
 
 ## Downloads
 
@@ -76,7 +73,8 @@ fixed.
 Upstream's build instructions (Linux/Windows/vcpkg-based macOS) still apply and are
 unchanged — see [the original README](https://github.com/Aleph-One-Marathon/alephone#readme).
 For the PPC/Intel/Apple Silicon fat-binary build specific to this fork, see
-`PORTING-PPC.md`, `scripts/build.sh`, and `scripts/build-arm64.sh`.
+`PORTING-PPC.md`, `scripts/build.sh`, and `scripts/build-arm64.sh`. Test-fleet installs use
+buildhost's shared `scripts/deploy-dmg.sh`/`smoke-dmg.sh`, configured by `scripts/dmg-port.conf`.
 
 ## License
 

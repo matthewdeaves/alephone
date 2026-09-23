@@ -64,3 +64,13 @@ void system_launch_url_in_browser(const char *url)
 	NSURL *urlref = [NSURL URLWithString:[NSString stringWithUTF8String:url]];
 	[[NSWorkspace sharedWorkspace] openURL:urlref];
 }
+
+// alephone#39: the Xcode build's copy of csalerts_darwin.cpp's hook (see the
+// comment there): SDL installs its app delegate only after finishLaunching,
+// so AppKit would open argv files as documents and hang in a modal alert.
+void system_disable_argv_document_open()
+{
+	@autoreleasepool {
+		[[NSUserDefaults standardUserDefaults] registerDefaults:@{@"NSTreatUnknownArgumentsAsOpen": @"NO"}];
+	}
+}

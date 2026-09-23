@@ -7,15 +7,10 @@
 #
 # Same recipe as build-deps-ppc.sh, step for step (no cmake: openal-soft is
 # compiled by hand with only the loopback/null backends, which is all Aleph One
-# uses). The deps are built at the 10.4 floor the i386 slice declares, so they
-# stay reusable when an i386 SDL2 for 10.4 exists. SDL2 itself is NOT built
-# here: stage 1 links old-mac-halflife's i386 SDL2 2.0.22 prefix
-# (~/oldmac/sdl2-snow-i386, 10.6 floor), because this toolchain has no
-# Objective-C for SDL's Cocoa backend.
-# SDL 2.0.22's headers assume a 10.6 SDK, and the 10.4u SDK can't link a 10.6
-# deployment target (no crt1.10.6.o). So whatever includes SDL keeps the 10.4
-# target and force-includes the compat header written below (SDL2_ttf here,
-# Aleph One in build.sh's i386 branch).
+# uses). Everything is built at the 10.4 floor the i386 slice declares.
+# SDL2 itself comes from scripts/build-sdl2-i386.sh (deps' SDL#7 fork, built
+# with Apple clang, because this toolchain has no Objective-C); SDL2_ttf is
+# built against it here, the same way the ppc recipe does.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -51,9 +46,9 @@ SDK=/Developer/SDKs/MacOSX10.4u.sdk
 [ -d "$SDK" ] || { echo "build-deps-i386.sh: no $SDK on this host" >&2; exit 1; }
 [ -x "$TOOLCHAIN/bin/i686-apple-darwin8-g++" ] || { echo "build-deps-i386.sh: no i686 toolchain at $TOOLCHAIN" >&2; exit 1; }
 JOBS=2
-SDL_PREFIX=/Users/mini/oldmac/sdl2-snow-i386
-if [ ! -x "$SDL_PREFIX/bin/sdl2-config" ] || [ ! -f "$SDL_PREFIX/lib/libSDL2-2.0.0.dylib" ]; then
-	echo "build-deps-i386.sh: i386 SDL2 prefix missing at $SDL_PREFIX" >&2
+SDL_PREFIX=/Users/mini/oldmac/alephone/sdl2-i386-tiger104
+if [ ! -x "$SDL_PREFIX/bin/sdl2-config" ] || [ ! -f "$SDL_PREFIX/lib/libSDL2.a" ]; then
+	echo "build-deps-i386.sh: i386 SDL2 prefix missing at $SDL_PREFIX (run scripts/build-sdl2-i386.sh)" >&2
 	exit 1
 fi
 
@@ -74,21 +69,6 @@ COMMON_CPPFLAGS="-isysroot $SDK -I$PREFIX/include"
 
 mkdir -p "$BUILD" "$PREFIX/include" "$PREFIX/lib" "$PREFIX/lib/pkgconfig"
 
-# What SDL 2.0.22's headers need from a 10.6 SDK that 10.4u lacks: the
-# deployment-target check in SDL_platform.h, and memset_pattern4 (libSystem
-# has it from 10.5; SDL_stdinc.h calls it inline). That SDL is the floor.
-cat > "$PREFIX/include/alephone-sdl2-i386-compat.h" << 'EOFCOMPAT'
-#ifndef ALEPHONE_SDL2_I386_COMPAT_H
-#define ALEPHONE_SDL2_I386_COMPAT_H
-#define MAC_OS_X_VERSION_MIN_REQUIRED 1060
-#define MAC_OS_X_VERSION_MAX_ALLOWED 1060
-#include <stddef.h>
-#ifdef __cplusplus
-extern "C"
-#endif
-void memset_pattern4(void *b, const void *pattern4, size_t len);
-#endif
-EOFCOMPAT
 
 # -------------------------------------------------------------
 # 1. FreeType 2.12.1
@@ -119,6 +99,9 @@ if [ ! -f "$PREFIX/lib/libSDL2_ttf.a" ]; then
     rm -rf SDL2_ttf-2.0.15
     $TAR -xzf "$SRC/SDL2_ttf-2.0.15.tar.gz"
     cd SDL2_ttf-2.0.15
+    # Its configure demands SDL >= 2.0.8, but the only newer call it makes is
+    # SDL_ceilf, shimmed below (-DSDL_ceilf=ceilf). Our SDL is the 2.0.3 fork.
+    perl -pi -e 's/^SDL_VERSION=2\.0\.8$/SDL_VERSION=2.0.3/' configure
     ./configure --host=i686-apple-darwin8 \
         --prefix="$PREFIX" \
         --disable-shared --enable-static \
@@ -126,7 +109,7 @@ if [ ! -f "$PREFIX/lib/libSDL2_ttf.a" ]; then
         --without-x \
         FT2_CFLAGS="-I$PREFIX/include/freetype2" \
         FT2_LIBS="-L$PREFIX/lib -lfreetype" \
-        CC="$CC" CFLAGS="$COMMON_CFLAGS -include $PREFIX/include/alephone-sdl2-i386-compat.h -include math.h -DSDL_ceilf=ceilf -I$SDL_PREFIX/include/SDL2 -I$PREFIX/include/freetype2" \
+        CC="$CC" CFLAGS="$COMMON_CFLAGS -include math.h -DSDL_ceilf=ceilf -I$SDL_PREFIX/include/SDL2 -I$PREFIX/include/freetype2" \
         LDFLAGS="$COMMON_LDFLAGS -L$SDL_PREFIX/lib -L$PREFIX/lib" \
         > /tmp/sdl2_ttf_build.log 2>&1 || { tail -40 /tmp/sdl2_ttf_build.log; exit 1; }
     make -j"$JOBS" >> /tmp/sdl2_ttf_build.log 2>&1

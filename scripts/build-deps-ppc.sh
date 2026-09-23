@@ -110,6 +110,9 @@ if [ ! -f "$PREFIX/lib/libSDL2_ttf.a" ]; then
     rm -rf SDL2_ttf-2.0.15
     $TAR -xzf "$SRC/SDL2_ttf-2.0.15.tar.gz"
     cd SDL2_ttf-2.0.15
+    # Its configure demands SDL >= 2.0.8, but the only newer call it makes is
+    # SDL_ceilf, shimmed below (-DSDL_ceilf=ceilf). Our SDL is the 2.0.3 fork.
+    perl -pi -e 's/^SDL_VERSION=2\.0\.8$/SDL_VERSION=2.0.3/' configure
     ./configure --host=powerpc-apple-darwin8 \
         --prefix="$PREFIX" \
         --disable-shared --enable-static \

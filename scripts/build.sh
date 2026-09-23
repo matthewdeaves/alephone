@@ -186,10 +186,13 @@ REMOTE_BUILD
 	i386)
 		# #30. Same shape as the ppc branch: GCC 14 cross-compiler
 		# (i686-apple-darwin8, old-mac-build-host#85), 10.4u SDK, static
-		# deps from scripts/build-deps-i386.sh. SDL2 is old-mac-halflife's
-		# i386 2.0.22 dylib (10.6 floor), bundled like x86_64's, so this
-		# slice runs on 10.6+ for now; 10.4/10.5 i386 needs an i386 SDL2
-		# built with Objective-C, which this toolchain can't compile.
+		# deps from scripts/build-deps-i386.sh, and a static SDL2 2.0.3 at
+		# the 10.4 floor from scripts/build-sdl2-i386.sh (deps' SDL#7 fork,
+		# built with Apple clang). Nothing to bundle: like ppc, the slice
+		# carries its own SDL.
+		# This run already holds $BUILD_HOST; tell the SDL script so it only
+		# claims its own build host (a second claim here would deadlock).
+		RETRO_BENCH_LOCK="$BUILD_HOST" ALEPHONE_I386_LINK_HOST="$BUILD_HOST" "$REPO_ROOT/scripts/build-sdl2-i386.sh"
 		echo "[build] syncing source tree to $BUILD_HOST..."
 		ssh "$BUILD_HOST" 'mkdir -p ~/oldmac/alephone/build-i386'
 		rsync -az --delete $(source_stamp_rsync_excludes "$SOURCE_STAMP_EXCLUDES") \
@@ -210,12 +213,10 @@ touch -t 202001030000 configure config.h.in $(find . -name Makefile.in)
 DEPS=/Users/mini/oldmac/alephone/i386-deps
 TOOLCHAIN=/Users/mini/oldmac/gcc14-i686
 SDK=/Developer/SDKs/MacOSX10.4u.sdk
-SDL_DIR=/Users/mini/oldmac/sdl2-snow-i386
-for f in "$SDK" "$TOOLCHAIN/bin/i686-apple-darwin8-g++" "$DEPS/lib/libopenal.a" "$DEPS/include/alephone-sdl2-i386-compat.h" "$SDL_DIR/lib/libSDL2-2.0.0.dylib"; do
+SDL_DIR=/Users/mini/oldmac/alephone/sdl2-i386-tiger104
+for f in "$SDK" "$TOOLCHAIN/bin/i686-apple-darwin8-g++" "$DEPS/lib/libopenal.a" "$DEPS/lib/libSDL2_ttf.a" "$SDL_DIR/lib/libSDL2.a"; do
 	[ -e "$f" ] || { echo "build.sh: i386 input missing: $f (scripts/build-deps-i386.sh builds the deps)" >&2; exit 1; }
 done
-# Record the prefix actually linked, as the x86_64 branch does (#38).
-printf '%s\n' "$SDL_DIR" > .sdl-dir
 
 export CC="$TOOLCHAIN/bin/i686-apple-darwin8-gcc"
 export CXX="$TOOLCHAIN/bin/i686-apple-darwin8-g++"
@@ -233,10 +234,7 @@ COMMON_CXXFLAGS="-O2 -std=c++17 -mmacosx-version-min=10.4 -isysroot $SDK -includ
 # i386 has its own unexport list: the ppc one left 35 cross-image binds with
 # the system libstdc++ on Lion (see the header of the i386 list).
 COMMON_LDFLAGS="-mmacosx-version-min=10.4 -isysroot $SDK -L$DEPS/lib -L$SDL_DIR/lib -static-libstdc++ -static-libgcc -Wl,-force_load,$TOOLCHAIN/i686-apple-darwin8/lib/libstdc++.a -Wl,-force_load,$TOOLCHAIN/lib/gcc/i686-apple-darwin8/14.2.0/libgcc.a -Wl,-unexported_symbols_list,$(pwd)/scripts/i386-libstdcxx-unexport-list.txt -lobjc -framework Cocoa -framework CoreFoundation -framework ApplicationServices -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework Carbon -framework IOKit -framework AGL -framework OpenGL -Wl,-w"
-# No symlink or copy into $SDL_DIR: it is old-mac-halflife's prefix.
-# SDL 2.0.22's headers assume a 10.6 SDK; the compat header (written by
-# build-deps-i386.sh) supplies what 10.4u lacks. That SDL is the floor.
-COMMON_CPPFLAGS="-include $DEPS/include/alephone-sdl2-i386-compat.h -I$DEPS/include -I$DEPS/include/SDL2 -I$SDL_DIR/include -I$SDL_DIR/include/SDL2 -I$DEPS/include/freetype2 -isysroot $SDK -include stddef.h"
+COMMON_CPPFLAGS="-I$DEPS/include -I$DEPS/include/SDL2 -I$SDL_DIR/include -I$SDL_DIR/include/SDL2 -I$DEPS/include/freetype2 -isysroot $SDK -include stddef.h"
 
 echo "[configure] configuring alephone for i686-apple-darwin8..."
 ./configure \
@@ -254,7 +252,7 @@ echo "[configure] configuring alephone for i686-apple-darwin8..."
     BOOST_FILESYSTEM_LIB="$DEPS/lib/libboost_filesystem.a $DEPS/lib/libboost_system.a" \
     BOOST_CPPFLAGS="-I$DEPS/include" \
     SDL_CFLAGS="-I$SDL_DIR/include -I$SDL_DIR/include/SDL2 -D_THREAD_SAFE" \
-    SDL_LIBS="-L$SDL_DIR/lib -lSDL2 -lobjc -framework Cocoa -framework Carbon -framework IOKit -framework CoreAudio -framework AudioToolbox -framework AudioUnit" \
+    SDL_LIBS="$("$SDL_DIR/bin/sdl2-config" --static-libs) -lobjc" \
     SDL_TTF_CFLAGS="-I$DEPS/include -I$DEPS/include/SDL2 -I$DEPS/include/freetype2 -D_THREAD_SAFE" \
     SDL_TTF_LIBS="-L$DEPS/lib -lSDL2_ttf -lfreetype" \
     ZLIB_CFLAGS="-I$SDK/usr/include" \
@@ -274,19 +272,12 @@ REMOTE_BUILD
 		rsync -az "$BUILD_HOST:~/oldmac/alephone/build-i386/Source_Files/alephone" "$REPO_ROOT/build/alephone-i386"
 		echo "[build] fetched build/alephone-i386"
 		otool -hv "$REPO_ROOT/build/alephone-i386"
-		_sdl_dir="$(ssh "$BUILD_HOST" 'cat ~/oldmac/alephone/build-i386/.sdl-dir')"
-		_sdl_ref="$(otool -L "$REPO_ROOT/build/alephone-i386" | awk '/libSDL2-2\.0\.0\.dylib/ {print $1; exit}')"
-		[ -n "$_sdl_dir" ] && [ -n "$_sdl_ref" ] || {
-			echo "build.sh: could not determine the linked i386 SDL2 prefix/load command" >&2; exit 1; }
-		mkdir -p "$REPO_ROOT/build/deps-i386"
-		scp -q "$BUILD_HOST:$_sdl_dir/lib/libSDL2-2.0.0.dylib" \
-			"$REPO_ROOT/build/deps-i386/libSDL2-2.0.0.dylib"
-		echo "[build] fetched build/deps-i386/libSDL2-2.0.0.dylib"
-		# Thin slice, before lipo: see the x86_64 branch.
-		install_name_tool -change "$_sdl_ref" \
-			@executable_path/../Frameworks/libSDL2-2.0.0.dylib \
-			"$REPO_ROOT/build/alephone-i386"
-		echo "[build] retargeted libSDL2 load command to @executable_path"
+		# Static SDL: no dylib to bundle, so the fat step must not fuse an
+		# i386 slice into the SDL2 dylib (left over from the 10.6 stage).
+		rm -rf "$REPO_ROOT/build/deps-i386"
+		if otool -L "$REPO_ROOT/build/alephone-i386" | grep -q libSDL2; then
+			echo "build.sh: i386 slice still links an SDL2 dylib" >&2; exit 1
+		fi
 		mkdir -p "$REPO_ROOT/build/stamp-i386"
 		source_stamp_write "$REPO_ROOT/build/stamp-i386" "$_stamp_i386"
 		;;
@@ -681,7 +672,7 @@ REMOTE_BUILD
 		# binary itself, and package-dmg.sh only has one Frameworks/ entry
 		# to bundle either way.
 		_sdl_inputs="$REPO_ROOT/build/deps-x86_64/libSDL2-2.0.0.dylib"
-		[ ! -f "$REPO_ROOT/build/alephone-i386" ] || _sdl_inputs="$_sdl_inputs $REPO_ROOT/build/deps-i386/libSDL2-2.0.0.dylib"
+		[ ! -f "$REPO_ROOT/build/deps-i386/libSDL2-2.0.0.dylib" ] || _sdl_inputs="$_sdl_inputs $REPO_ROOT/build/deps-i386/libSDL2-2.0.0.dylib"
 		[ ! -f "$REPO_ROOT/build/deps-arm64/libSDL2-2.0.0.dylib" ] || _sdl_inputs="$_sdl_inputs $REPO_ROOT/build/deps-arm64/libSDL2-2.0.0.dylib"
 		if [ "$_sdl_inputs" != "$REPO_ROOT/build/deps-x86_64/libSDL2-2.0.0.dylib" ]; then
 			mkdir -p "$REPO_ROOT/build/deps-fat"

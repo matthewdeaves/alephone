@@ -3,6 +3,21 @@
 One short entry per real bug fixed in this fork: what it was, what the fix was.
 Newest first.
 
+- **bench-evidence.sh runs against real (not fast-dev-box) fleet hosts could
+  read INVALID off a genuinely live, ticking, hash-verified run** (alephone#45).
+  `bench-adapter.sh`'s `bench_launch` left the game running only 6s after
+  returning before asking it to quit, to give `bench-evidence.sh`'s own
+  post-return work (host-info/hash ssh round trips, frame captures, two
+  liveness pings 3s apart) time to sample a still-live process. On imac-g5
+  (real Leopard PowerPC, not a fast box) that overhead routinely ate 3-8s by
+  itself, so the quit (or its AppleScript Apple-Event delivery pausing the
+  game's own focus) had often already fired by sampling time -- measured as
+  both "liveness did not advance" and "frames byte-identical" on runs whose
+  `fps-log` showed real, continuously-advancing gameplay throughout (confirmed
+  with a 30s direct, unwrapped run against the same demo film). Widened the
+  grace period from a hardcoded 6s to a tunable `ALEPHONE_BENCH_QUIT_GRACE`,
+  default 20s.
+
 - **Intel GMA 950 Macs ran at about 1 fps by default** (alephone#39/#30).
   The GPU advertises GLSL, so the shader renderer was chosen, but it has no
   hardware vertex shaders (GL 1.4). Interleaved film replays on mini-intel

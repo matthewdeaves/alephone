@@ -13,6 +13,16 @@
 #                           at least one completed window)
 #   ALEPHONE_BENCH_SECS     how long bench_launch itself runs the game for
 #                           before returning, default 12
+#   ALEPHONE_BENCH_FILM     demo film basename under Marathon 2/Demos, default
+#                           L00 (light scene). alephone#45 heavy-scene protocol
+#                           (same film alephone#42 used) sets this to L05.
+#   ALEPHONE_BENCH_QUIT_GRACE  seconds bench_launch leaves the game running
+#                           after it returns, before asking it to quit -- must
+#                           outlast bench-evidence.sh's own post-return ssh
+#                           round trips (host info, hashing, frame capture)
+#                           plus its two 3s-apart liveness samples, or those
+#                           land on an already-quitting process. Default 20
+#                           (alephone#45: 6 raced this on imac-g5).
 #
 # alephone#43 (build-host#105 pin migration): bench-evidence.sh now runs from
 # old-mac-build-host's pinned-revision cache (~/.cache/retro-shared/<sha>/),
@@ -34,7 +44,7 @@ _ao_paths() {
 	AO_EXEC="$app_dir/Aleph One.app/Contents/MacOS/Aleph One"
 	AO_DATA="$app_dir/Scenarios/Marathon 2"
 	AO_DEMOS="$AO_DATA/Demos"
-	AO_FILM="$AO_DEMOS/L00.filA"
+	AO_FILM="$AO_DEMOS/${ALEPHONE_BENCH_FILM:-L00}.filA"
 	AO_APP_DIR="$app_dir"
 }
 
@@ -52,16 +62,28 @@ _ao_sh() {
 }
 
 # Blocks for the whole bench window itself (like quake3's safebench.sh), then
-# leaves the game running a further ~6s so bench-evidence.sh's own two
-# liveness pings (return + 3s apart) sample a genuinely still-live process,
-# and schedules its own stop -- detached, on the remote side -- so nothing
-# leaks regardless of what the caller does next.
+# leaves the game running a further grace period so bench-evidence.sh's own
+# post-return work (host-info/hash ssh round trips, frame captures, then two
+# liveness pings 3s apart) samples a genuinely still-live, still-ticking
+# process, and schedules its own stop -- detached, on the remote side -- so
+# nothing leaks regardless of what the caller does next.
+#
+# alephone#45: the original 6s grace raced that post-return work on imac-g5
+# (a real Leopard PowerPC host, not a fast dev box) -- ssh round trips for
+# sysctl/sw_vers/hashing alone routinely ate 3-8s before the first liveness
+# sample, so the quit (or its AppleScript Apple-Event delivery pausing the
+# game's own focus) had often already fired by sampling time: measured as
+# both "liveness did not advance" (ticks frozen) and "frames byte-identical"
+# on the same runs, even though fps-log showed real, continuously-advancing
+# gameplay the whole time (confirmed with a 30s direct, unwrapped run).
+# 20s leaves comfortable headroom for that overhead on this class of host.
 bench_launch() {
 	local host="$1" round="$2" workdir="$3"
 	_ao_paths
 	local target="${ALEPHONE_BENCH_TARGET:-60}"
 	local log_secs="${ALEPHONE_BENCH_LOG_SECS:-2}"
 	local secs="${ALEPHONE_BENCH_SECS:-12}"
+	local quit_grace="${ALEPHONE_BENCH_QUIT_GRACE:-20}"
 	local run_home; run_home="$(_ao_run_home)"
 	local log_path; log_path="$(_ao_log_path)"
 
@@ -95,7 +117,7 @@ if kill -0 "\$pid" 2>/dev/null; then
 else
 	wait "\$pid"; ec=\$?
 fi
-( sleep 6
+( sleep $quit_grace
   osascript -e 'tell application "Aleph One" to quit' >/dev/null 2>&1 || true
   for i in 1 2 3 4 5; do kill -0 "\$pid" 2>/dev/null || exit 0; sleep 1; done
   kill "\$pid" 2>/dev/null || true

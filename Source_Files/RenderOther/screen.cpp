@@ -129,7 +129,19 @@ static bool use_classic_ogl = false;    // alephone#12: no GLSL, but a real GL c
 // Default Preferences.xml: filtering, fog, models) is left alone. An
 // existing preferences file always wins.
 //   tier 0: no GLSL (classic renderer) or no FBO, or a software renderer:
-//           engine defaults unchanged (30 fps target, no anisotropy).
+//           engine defaults unchanged (30 fps target, no anisotropy) --
+//           except a host forced into classic mode by the alephone#16
+//           GLSL-software-fallback workaround whose GL context reports FBO
+//           anyway (classic_fbo_bump below): alephone#45 heavy-scene
+//           bench-evidence (build-host#104, Marathon 2 L05, imac-g5,
+//           R300-class GPU) measured a worst observed frame of 31.1ms at
+//           fps_target 60, comfortably inside the 25fps floor, so the same
+//           FBO signal the tier >=1 check below already trusts gets it the
+//           tier 1 fps_target too, still rendering classic. A forced-classic
+//           host WITHOUT FBO stays untouched: alephone#45 measured a real
+//           multi-window warm-up stall on one such (weaker, older) class at
+//           fps_target 60 that this signal correctly excludes, since a real
+//           non-forced tier-0 host of the same class would too.
 //   tier 1: GLSL + FBO: 60 fps (interpolated), 4x anisotropy.
 //   tier 2: tier 1 + max texture size >= 8192: display-rate fps
 //           (unlimited, paced by vsync), 16x anisotropy.
@@ -150,11 +162,15 @@ static void apply_first_run_gl_tier(bool classic)
 	int tier = 0;
 	if (!classic && fbo && !software)
 		tier = max_texture >= 8192 ? 2 : 1;
+	bool classic_fbo_bump = classic && fbo && !software;
 	if (getenv("ALEPHONE_GL_TIER"))
+	{
 		tier = std::max(0, std::min(2, atoi(getenv("ALEPHONE_GL_TIER"))));
+		classic_fbo_bump = false;
+	}
 
-	printf("gl-tier: %d (renderer '%s', %s, max texture %d, fbo %d, anisotropic %d)\n",
-		   tier, renderer ? renderer : "?", classic ? "classic" : "shader", (int) max_texture, fbo, aniso);
+	printf("gl-tier: %d (renderer '%s', %s, max texture %d, fbo %d, anisotropic %d, classic-fbo-bump %d)\n",
+		   tier, renderer ? renderer : "?", classic ? "classic" : "shader", (int) max_texture, fbo, aniso, classic_fbo_bump);
 	if (!preferences_were_defaulted)
 	{
 		printf("gl-tier: existing preferences kept\n");
@@ -165,6 +181,10 @@ static void apply_first_run_gl_tier(bool classic)
 		graphics_preferences->fps_target = tier == 2 ? 0 : 60;
 		if (aniso)
 			graphics_preferences->OGL_Configure.AnisotropyLevel = tier == 2 ? 16.0f : 4.0f;
+	}
+	else if (classic_fbo_bump)
+	{
+		graphics_preferences->fps_target = 60;
 	}
 	printf("gl-tier: first run, applied fps target %d, anisotropy %.0f\n",
 		   graphics_preferences->fps_target, graphics_preferences->OGL_Configure.AnisotropyLevel);

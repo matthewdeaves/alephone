@@ -1407,6 +1407,7 @@ static void log_frame_rate()
 	static clock::time_point window_start, last_frame;
 	static int frames = 0;
 	static float worst_ms = 0;
+	static int32 window_start_tick = 0;
 
 	if (interval < 0)
 	{
@@ -1424,6 +1425,7 @@ static void log_frame_rate()
 			fflush(stdout);
 		}
 		window_start = last_frame = clock::now();
+		window_start_tick = dynamic_world ? dynamic_world->tick_count : 0;
 	}
 	if (interval <= 0)
 		return;
@@ -1438,10 +1440,17 @@ static void log_frame_rate()
 	float elapsed = std::chrono::duration<float>(now - window_start).count();
 	if (elapsed >= interval)
 	{
-		printf("fps-log: %.1f fps over %.1fs (%d frames), worst frame %.1f ms\n",
-			   frames / elapsed, elapsed, frames, worst_ms);
+		// alephone#42: rendering steadily proves nothing about the game world
+		// actually advancing (a paused game keeps drawing the frozen last
+		// frame at a normal fps). tick_count is the simulation clock, not the
+		// render clock, so a delta of 0 here means the world is not
+		// advancing regardless of how healthy the fps number looks.
+		int32 now_tick = dynamic_world ? dynamic_world->tick_count : 0;
+		printf("fps-log: %.1f fps over %.1fs (%d frames), worst frame %.1f ms, ticks %d\n",
+			   frames / elapsed, elapsed, frames, worst_ms, now_tick - window_start_tick);
 		fflush(stdout);
 		window_start = now;
+		window_start_tick = now_tick;
 		frames = 0;
 		worst_ms = 0;
 	}

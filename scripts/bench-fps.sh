@@ -109,11 +109,25 @@ while [ "$r" -le "$ROUNDS" ]; do
 		alive=yes; kill -0 "$pid" 2>/dev/null || alive=no
 		stop "$pid"
 		[ "$r$target" = "130" ] && grep -E '^(GL_RENDERER|gl-tier|fps-log: window)' "$log" | sed 's/^/  /'
-		# drop the first (cold) window; report mean/min fps and worst frame
+		# drop the first (cold) window; report mean/min fps and worst frame.
+		# fps-log ends ", ticks N" (alephone#42, 21f3761f) once a host's
+		# installed binary has the world-tick liveness field; older
+		# installs still end "... ms" with no trailing ticks token. Detect
+		# by whether the line's last field is bare digits, so this parses
+		# both formats correctly instead of silently misreading worst-frame
+		# once any host gets the new binary.
 		grep '^fps-log: [0-9]' "$log" | sed 1d | awk -v r="$r" -v t="$target" -v a="$alive" '
-			{ f = $2; n++; s += f; if (n == 1 || f < mn) mn = f; w = $(NF-1); if (w > mw) mw = w }
-			END { if (n) printf "round %d target %-3s: mean %.1f fps, min window %.1f, worst frame %.0f ms (%d windows, alive at end: %s)\n", r, (t == 0 ? "max" : t), s / n, mn, mw, n, a
-			      else printf "round %d target %-3s: NO fps windows (alive at end: %s)\n", r, (t == 0 ? "max" : t), a }'
+			{
+				f = $2; n++; s += f; if (n == 1 || f < mn) mn = f
+				if ($NF ~ /^[0-9]+$/ && $(NF-1) == "ticks") { w = $(NF-3); tk = $NF; have_ticks = 1; tsum += tk }
+				else { w = $(NF-1) }
+				if (w > mw) mw = w
+			}
+			END {
+				frozen = (have_ticks && tsum == 0) ? " -- FROZEN (0 world ticks)" : ""
+				if (n) printf "round %d target %-3s: mean %.1f fps, min window %.1f, worst frame %.0f ms%s (%d windows, alive at end: %s)\n", r, (t == 0 ? "max" : t), s / n, mn, mw, frozen, n, a
+				else printf "round %d target %-3s: NO fps windows (alive at end: %s)\n", r, (t == 0 ? "max" : t), a
+			}'
 	done
 	r=$((r + 1))
 done

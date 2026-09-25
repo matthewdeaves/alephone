@@ -1400,6 +1400,10 @@ extern bool is_network_pregame;
 // on-screen counter (which only runs while shown, and averages per-frame
 // rates). ALEPHONE_FPS_LOG=<seconds> prints frames/elapsed and the worst
 // frame time for each window to stdout, next to the GL_RENDERER lines.
+// build-host#104: the one-time window-open line also prints the effective
+// fps_target (get_fps_target(), so ALEPHONE_FPS_TARGET overrides show up
+// here, not just the raw preference) for bench-adapter.sh's
+// bench_effective_config to read back and compare against --requested.
 static void log_frame_rate()
 {
 	using clock = std::chrono::high_resolution_clock;
@@ -1420,8 +1424,8 @@ static void log_frame_rate()
 			if (screen_mode.acceleration != _no_acceleration)
 				renderer = OGL_UseClassicRenderer() ? "classic" : "shader";
 #endif
-			printf("fps-log: window %ds, renderer %s, %dx%d\n", interval, renderer,
-				   MainScreenPixelWidth(), MainScreenPixelHeight());
+			printf("fps-log: window %ds, renderer %s, %dx%d, fps_target %d\n", interval, renderer,
+				   MainScreenPixelWidth(), MainScreenPixelHeight(), get_fps_target());
 			fflush(stdout);
 		}
 		window_start = last_frame = clock::now();

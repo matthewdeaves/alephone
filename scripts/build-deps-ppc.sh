@@ -13,14 +13,14 @@ BUILD_HOST_CLAIMED=0
 if [ -z "${BUILD_HOST:-}" ]; then
 	export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-$$.$(date +%s).${RANDOM:-0}}"
 	BUILD_HOST="$(BUILD_LOCK_WAIT="${BUILD_LOCK_WAIT:-900}" \
-		"$REPO_ROOT/scripts/pick-build-host.sh" --acquire "alephone build-deps-ppc")" || {
-		echo "build-deps-ppc.sh: no free Intel build host; see scripts/pick-build-host.sh --status" >&2
+		"$REPO_ROOT/scripts/shared.sh" pick-build-host.sh --acquire "alephone build-deps-ppc")" || {
+		echo "build-deps-ppc.sh: no free Intel build host; see scripts/shared.sh pick-build-host.sh --status" >&2
 		exit 1
 	}
 	BUILD_HOST_CLAIMED=1
 	echo "[deps-ppc] claimed build host: $BUILD_HOST"
 fi
-trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/pick-build-host.sh" --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
+trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/shared.sh" pick-build-host.sh --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
 BUILD_HOST="$BUILD_HOST" "$REPO_ROOT/scripts/migrate-home-layout.sh"
 
 BUILD_HOST="$BUILD_HOST" "$REPO_ROOT/scripts/build-sdl2-ppc.sh"

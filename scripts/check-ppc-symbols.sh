@@ -29,13 +29,13 @@ BUILD_HOST_CLAIMED=0
 if [ -z "${BUILD_HOST:-}" ]; then
 	export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-alephone.symcheck.$$.$(date +%s)}"
 	BUILD_HOST="$(BUILD_LOCK_WAIT="${BUILD_LOCK_WAIT:-900}" \
-		"$REPO_ROOT/scripts/pick-build-host.sh" --acquire "alephone $ARCH symbol check")" || {
+		"$REPO_ROOT/scripts/shared.sh" pick-build-host.sh --acquire "alephone $ARCH symbol check")" || {
 		echo "check-ppc-symbols.sh: no free build host" >&2
 		exit 1
 	}
 	BUILD_HOST_CLAIMED=1
 fi
-trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/pick-build-host.sh" --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
+trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/shared.sh" pick-build-host.sh --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
 
 ssh "$BUILD_HOST" 'mkdir -p ~/oldmac/alephone/symcheck'
 scp -q "$BIN" "$BUILD_HOST:oldmac/alephone/symcheck/bin"

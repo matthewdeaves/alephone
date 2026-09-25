@@ -61,7 +61,8 @@ Upstream's build instructions (Linux/Windows/vcpkg-based macOS) still apply and 
 unchanged — see [the original README](https://github.com/Aleph-One-Marathon/alephone#readme).
 For the PPC/Intel/Apple Silicon fat-binary build specific to this fork, see
 `PORTING-PPC.md`, `scripts/build.sh`, and `scripts/build-arm64.sh`. Test-fleet installs use
-buildhost's shared `scripts/deploy-dmg.sh`/`smoke-dmg.sh`, configured by `scripts/dmg-port.conf`.
+buildhost's shared `deploy-dmg.sh`/`smoke-dmg.sh` (pinned via `shared-scripts.pin`,
+run through `scripts/shared.sh`), configured by `scripts/dmg-port.conf`.
 
 ## License
 

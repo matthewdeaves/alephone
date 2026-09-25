@@ -201,13 +201,8 @@ EOF
 
 	# Strip any quarantine attribute that hitched a ride on a source asset
 	# (icons, data files) before we sign — codesign rejects a quarantined tree.
-	# Canonical primitive (old-mac-build-host#34); falls back to inline xattr
-	# if this tree predates the sync.
-	if [ -x "$REPO_ROOT/scripts/clear-launch-quarantine.sh" ]; then
-		"$REPO_ROOT/scripts/clear-launch-quarantine.sh" "$APP_DIR"
-	else
-		xattr -dr com.apple.quarantine "$APP_DIR" 2>/dev/null || true
-	fi
+	# Canonical primitive (old-mac-build-host#34), pinned via shared.sh.
+	"$REPO_ROOT/scripts/shared.sh" clear-launch-quarantine.sh "$APP_DIR"
 
 	# Ad-hoc sign so Gatekeeper's assessment on Catalina+ can succeed at all.
 	# Without any signature, a quarantined+unsigned app on modern macOS commonly
@@ -462,11 +457,7 @@ chmod +x "$STAGE_DIR/Aleph One/Fix Launch Problems.command"
 
 # Defense in depth: strip quarantine from the whole staged tree (scenario
 # data was rsync'd from /tmp, which may itself have picked up the attribute).
-if [ -x "$REPO_ROOT/scripts/clear-launch-quarantine.sh" ]; then
-	"$REPO_ROOT/scripts/clear-launch-quarantine.sh" "$STAGE_DIR"
-else
-	xattr -dr com.apple.quarantine "$STAGE_DIR" 2>/dev/null || true
-fi
+"$REPO_ROOT/scripts/shared.sh" clear-launch-quarantine.sh "$STAGE_DIR"
 
 echo "[2/2] Creating DMG disk image..."
 DMG_PATH="$DIST_DIR/$DMG_NAME"

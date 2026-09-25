@@ -19,14 +19,14 @@ BUILD_HOST_CLAIMED=0
 if [ -z "${BUILD_HOST:-}" ]; then
 	export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-$$.$(date +%s).${RANDOM:-0}}"
 	BUILD_HOST="$(BUILD_HOSTS="${BUILD_HOSTS:-mini-intel2}" BUILD_LOCK_WAIT="${BUILD_LOCK_WAIT:-900}" \
-		"$REPO_ROOT/scripts/pick-build-host.sh" --acquire "alephone build-deps-i386")" || {
-		echo "build-deps-i386.sh: mini-intel2 is not free; see scripts/pick-build-host.sh --status" >&2
+		"$REPO_ROOT/scripts/shared.sh" pick-build-host.sh --acquire "alephone build-deps-i386")" || {
+		echo "build-deps-i386.sh: mini-intel2 is not free; see scripts/shared.sh pick-build-host.sh --status" >&2
 		exit 1
 	}
 	BUILD_HOST_CLAIMED=1
 	echo "[deps-i386] claimed build host: $BUILD_HOST"
 fi
-trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/pick-build-host.sh" --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
+trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/shared.sh" pick-build-host.sh --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
 
 echo "[deps-i386] syncing source archives to $BUILD_HOST..."
 ssh "$BUILD_HOST" 'mkdir -p ~/oldmac/alephone/deps-src ~/oldmac/alephone/i386-deps'

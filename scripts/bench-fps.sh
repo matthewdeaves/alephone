@@ -46,21 +46,21 @@ is_local_host() {
 }
 
 export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-alephone.bench.$$.$(date +%s)}"
-"$REPO_ROOT/scripts/pick-bench-host.sh" --acquire "$HOST" "alephone #39 fps bench" >/dev/null || {
-	echo "bench-fps.sh: could not claim $HOST; see scripts/pick-bench-host.sh --status" >&2
+"$REPO_ROOT/scripts/shared.sh" pick-bench-host.sh --acquire "$HOST" "alephone #39 fps bench" >/dev/null || {
+	echo "bench-fps.sh: could not claim $HOST; see scripts/shared.sh pick-bench-host.sh --status" >&2
 	exit 1
 }
-trap '"$REPO_ROOT/scripts/pick-bench-host.sh" --release "$HOST" >/dev/null 2>&1; true' EXIT
+trap '"$REPO_ROOT/scripts/shared.sh" pick-bench-host.sh --release "$HOST" >/dev/null 2>&1; true' EXIT
 
 # Refuse to launch into a locked/shielded console (old-mac-build-host#88):
 # the game never comes to the front there, so a "pass" would mean nothing.
 if is_local_host "$HOST"; then
-	"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gui-precondition.sh" || {
+	"$REPO_ROOT/scripts/shared.sh" gui-precondition.sh || {
 		echo "UNTESTED: $HOST console is not ready for a GUI launch (gui-precondition.sh)" >&2
 		exit 1
 	}
 else
-	"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gui-precondition.sh" "$HOST" || {
+	"$REPO_ROOT/scripts/shared.sh" gui-precondition.sh "$HOST" || {
 		echo "UNTESTED: $HOST console is not ready for a GUI launch (gui-precondition.sh)" >&2
 		exit 1
 	}

@@ -27,14 +27,14 @@ if [ -z "${BUILD_HOST:-}" ]; then
 	# matching and can drop another alephone session's claim (build-host#7).
 	export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-alephone.sdl2ppc.$$.$(date +%s)}"
 	BUILD_HOST="$(BUILD_LOCK_WAIT="${BUILD_LOCK_WAIT:-900}" \
-		"$REPO_ROOT/scripts/pick-build-host.sh" --acquire "alephone SDL2 PPC")" || {
+		"$REPO_ROOT/scripts/shared.sh" pick-build-host.sh --acquire "alephone SDL2 PPC")" || {
 		echo "build-sdl2-ppc.sh: no free Intel build host" >&2
 		exit 1
 	}
 	BUILD_HOST_CLAIMED=1
 	echo "[sdl2-ppc] claimed build host: $BUILD_HOST"
 fi
-trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/pick-build-host.sh" --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
+trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/shared.sh" pick-build-host.sh --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
 
 ssh "$BUILD_HOST" 'bash -s' -- "$PIN" "$DEPS_SDL_REPO" "$DEPS_SDL_TAG" <<'REMOTE_BUILD'
 set -euo pipefail

@@ -26,13 +26,13 @@ if [ -z "${BUILD_HOST:-}" ]; then
 	host="${1:?usage: $0 HOST (or set BUILD_HOST when already holding its lock)}"
 	export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-$$.$(date +%s).${RANDOM:-0}}"
 	BUILD_HOST="$(BUILD_LOCK_WAIT="${BUILD_LOCK_WAIT:-900}" \
-		"$REPO_ROOT/scripts/pick-build-host.sh" --acquire-host "$host" "alephone migrate-home-layout")" || {
-		echo "migrate-home-layout.sh: could not claim $host; see scripts/pick-build-host.sh --status" >&2
+		"$REPO_ROOT/scripts/shared.sh" pick-build-host.sh --acquire-host "$host" "alephone migrate-home-layout")" || {
+		echo "migrate-home-layout.sh: could not claim $host; see scripts/shared.sh pick-build-host.sh --status" >&2
 		exit 1
 	}
 	BUILD_HOST_CLAIMED=1
 fi
-trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/pick-build-host.sh" --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
+trap '[ "$BUILD_HOST_CLAIMED" = 1 ] && "$REPO_ROOT/scripts/shared.sh" pick-build-host.sh --release "$BUILD_HOST" >/dev/null 2>&1; true' EXIT
 
 ssh "$BUILD_HOST" 'bash -s' << 'REMOTE_MIGRATE'
 set -euo pipefail

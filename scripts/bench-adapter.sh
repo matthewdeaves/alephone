@@ -13,6 +13,13 @@
 #                           at least one completed window)
 #   ALEPHONE_BENCH_SECS     how long bench_launch itself runs the game for
 #                           before returning, default 12
+#
+# alephone#43 (build-host#105 pin migration): bench-evidence.sh now runs from
+# old-mac-build-host's pinned-revision cache (~/.cache/retro-shared/<sha>/),
+# not from this repo's scripts/ next to this file, so its own
+# `$SELF_DIR/bench-adapter.sh` default can no longer find this file. Always
+# invoke it as:
+#   BENCH_ADAPTER="$REPO_ROOT/scripts/bench-adapter.sh" scripts/shared.sh bench-evidence.sh <host> <round> ...
 
 # shellcheck disable=SC2034  # read by bench-evidence.sh after it sources this file
 PORT=alephone

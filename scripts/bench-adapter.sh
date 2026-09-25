@@ -126,14 +126,19 @@ bench_liveness() {
 	_ao_sh "$host" "awk '/^fps-log: [0-9]/ && \$(NF-1) == \"ticks\" { t += \$NF } END { if (t != \"\") print t+0 }' \"$log_path\" 2>/dev/null"
 }
 
-# Reads back the one-time window-open line (build-host#104: extended in
-# screen.cpp to also print get_fps_target(), so an ALEPHONE_FPS_TARGET
-# override shows up here as the run's actual effective target, not just the
-# raw preference file value the older gl-tier line reports).
+# Reads back the one-time window-open line. renderer=/resolution= are on
+# every install (manager ask, old-mac-build-host#109 comments: report
+# resolution so a fullscreen/WxH mismatch fails --requested, the halflife
+# bug). fps_target= only appears on installs with 3d35e96f (screen.cpp
+# printing get_fps_target(), so an ALEPHONE_FPS_TARGET override shows up
+# here as the run's actual effective target, not just the raw preference
+# value the older gl-tier line reports) -- absent, not fabricated, on an
+# older install.
 bench_effective_config() {
 	local host="$1"
 	local log_path; log_path="$(_ao_log_path)"
-	_ao_sh "$host" "grep -m1 '^fps-log: window' \"$log_path\" 2>/dev/null" | \
-		sed -n 's/^fps-log: window [0-9]*s, renderer \([a-z]*\), [0-9]*x[0-9]*, fps_target \([0-9]*\)$/renderer=\1\nfps_target=\2/p'
+	local line; line="$(_ao_sh "$host" "grep -m1 '^fps-log: window' \"$log_path\" 2>/dev/null")"
+	printf '%s\n' "$line" | sed -n 's/^fps-log: window [0-9]*s, renderer \([a-z]*\), \([0-9]*x[0-9]*\).*/renderer=\1\nresolution=\2/p'
+	printf '%s\n' "$line" | sed -n 's/.*fps_target \([0-9]*\)$/fps_target=\1/p'
 	_ao_sh "$host" "grep -m1 '^GL_RENDERER:' \"$log_path\" 2>/dev/null" | sed -n 's/^GL_RENDERER: /gl_renderer=/p'
 }

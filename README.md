@@ -22,7 +22,7 @@ They are tracked, not dropped:
 - **`x86_64` needs 10.6, not 10.5** ([#31](https://github.com/matthewdeaves/alephone/issues/31)).
   Same gap: no Intel Mac running 10.5 to test on.
 
-**Tested for v1.2.0** on real hardware: G3 (10.3.9, 10.4.11), G4 Mac mini (10.4.11),
+**Tested for v1.2.1** on real hardware: G3 (10.3.9, 10.4.11), G4 Mac mini (10.4.11),
 G5 (10.3.9, 10.4.11, 10.5.8), Core 2 Mac minis (10.6.8, 10.7.5; `i386` via `arch -i386`),
 a 2019 iMac (macOS 15) and an M5 Mac (macOS 26); played by hand on the G3 and G5.
 No 32-bit-only Core Solo/Duo Mac, or Intel Mac on 10.4/10.5, is in the fleet.
@@ -40,7 +40,9 @@ the Marathon 2 demo on a Core 2 Mac mini, using classic OpenGL).
   or measured too slow with it (Radeon 9600, GMA 950), use the classic
   fixed-function renderer. First-run graphics defaults come from the GL
   capabilities found at runtime. The software renderer remains a manual option
-  and the fallback if no GL context can be created.
+  and the fallback if no GL context can be created. A classic-renderer GPU that
+  still reports framebuffer-object support (e.g. Radeon 9600 on a G5) defaults
+  to 60fps instead of 30, based on real-hardware headroom measurement.
 - Host or join a network game through your own private dedicated server, not just
   the official public server list — see `SERVER.md` (deployment lives in
   [retro-server-infra](https://github.com/matthewdeaves/retro-server-infra)).

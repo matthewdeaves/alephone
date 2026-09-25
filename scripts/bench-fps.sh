@@ -12,6 +12,19 @@
 # or written; the first run there is a first run, so the log also shows the
 # GL tier this Mac gets. Claims the host through pick-bench-host.sh and
 # terminates every run with the same quit, TERM, KILL escalation as smoke-dmg.sh.
+#
+# -l/--replay-directory is passed with the launch (alephone#42): a game
+# launched headless this way never actually gains OS keyboard focus (the
+# launching shell has no controlling GUI session to hand it), so
+# SDL_WINDOWEVENT_FOCUS_LOST fires and shell.cpp's pause_game() freezes world
+# ticks while the renderer keeps drawing the frozen frame at a steady fps --
+# looks like real playback in the fps-log, isn't. shell_options.replay_directory
+# is the engine's own existing "unattended replay" gate (shell.cpp:1484): it is
+# only ever checked for empty/non-empty, never scanned for files, so any
+# existing directory satisfies it while the actual film to play still comes
+# from the positional argument below, unchanged. This does NOT touch that
+# pause-on-focus-loss behavior for a normal interactive launch (double-click),
+# where it is correct and intentional.
 
 set -euo pipefail
 
@@ -19,6 +32,18 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST="${1:?usage: $0 <host-alias> [rounds] [seconds-per-run]}"
 ROUNDS="${2:-3}"
 SECS="${3:-40}"
+
+# workstation is this machine itself (arm64 Apple Silicon), same as
+# pick-bench-host.sh's own LOCAL_ALIASES: no sshd there, ssh-to-self would
+# need a hostkey dance against a machine already trusted implicitly, so it
+# is claimed the same way but launched with a local shell instead of ssh.
+LOCAL_ALIASES="${LOCAL_ALIASES:-workstation}"
+is_local_host() {
+	case " $LOCAL_ALIASES " in
+		*" $1 "*) return 0 ;;
+		*)        return 1 ;;
+	esac
+}
 
 export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-alephone.bench.$$.$(date +%s)}"
 "$REPO_ROOT/scripts/pick-bench-host.sh" --acquire "$HOST" "alephone #39 fps bench" >/dev/null || {
@@ -29,19 +54,33 @@ trap '"$REPO_ROOT/scripts/pick-bench-host.sh" --release "$HOST" >/dev/null 2>&1;
 
 # Refuse to launch into a locked/shielded console (old-mac-build-host#88):
 # the game never comes to the front there, so a "pass" would mean nothing.
-"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gui-precondition.sh" "$HOST" || {
-	echo "UNTESTED: $HOST console is not ready for a GUI launch (gui-precondition.sh)" >&2
-	exit 1
-}
+if is_local_host "$HOST"; then
+	"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gui-precondition.sh" || {
+		echo "UNTESTED: $HOST console is not ready for a GUI launch (gui-precondition.sh)" >&2
+		exit 1
+	}
+else
+	"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gui-precondition.sh" "$HOST" || {
+		echo "UNTESTED: $HOST console is not ready for a GUI launch (gui-precondition.sh)" >&2
+		exit 1
+	}
+fi
 
-ssh "$HOST" bash -s -- "$ROUNDS" "$SECS" << 'REMOTE_BENCH'
+if is_local_host "$HOST"; then
+	RUN_REMOTE=(/bin/sh -s --)
+else
+	RUN_REMOTE=(ssh "$HOST" bash -s --)
+fi
+
+"${RUN_REMOTE[@]}" "$ROUNDS" "$SECS" << 'REMOTE_BENCH'
 # No pipefail: Tiger's /bin/bash 2.05b rejects it.
 set -u
 ROUNDS="$1"; SECS="$2"
 APP_DIR="/Applications/Aleph One"
 EXEC="$APP_DIR/Aleph One.app/Contents/MacOS/Aleph One"
 DATA="$APP_DIR/Scenarios/Marathon 2"
-FILM="$DATA/Demos/L00.filA"
+DEMOS="$DATA/Demos"
+FILM="$DEMOS/L00.filA"
 W="$HOME/oldmac/alephone/bench"
 [ -x "$EXEC" ] && [ -f "$FILM" ] || { echo "BENCH FAIL: install or demo film missing"; exit 1; }
 
@@ -64,7 +103,7 @@ while [ "$r" -le "$ROUNDS" ]; do
 		# subshell and leave the game running into the next run (and into
 		# the next claimant's session).
 		( cd "$APP_DIR" && HOME="$W/home" ALEPHONE_FPS_LOG=5 ALEPHONE_FPS_TARGET=$target \
-			exec "$EXEC" -s --no-chooser -Q "$DATA" "$FILM" > "$log" 2>&1 < /dev/null ) &
+			exec "$EXEC" -s --no-chooser -Q -l "$DEMOS" "$DATA" "$FILM" > "$log" 2>&1 < /dev/null ) &
 		pid=$!
 		sleep "$SECS"
 		alive=yes; kill -0 "$pid" 2>/dev/null || alive=no

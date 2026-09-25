@@ -14,13 +14,12 @@
 #   ALEPHONE_BENCH_SECS     how long bench_launch itself runs the game for
 #                           before returning, default 12
 
+# shellcheck disable=SC2034  # read by bench-evidence.sh after it sources this file
 PORT=alephone
-# Contract (docs/bench-evidence.md) allows INSTALL_BIN to be $HOME-relative
-# or absolute; bench-evidence.sh's own hash check only implements the
-# $HOME-relative case ("$HOME/$INSTALL_BIN"), so with an absolute path here
-# that check degrades to NOTCHECKED rather than comparing the wrong file.
-# Our install is always at root /Applications (fleet policy), never
-# $HOME/Applications -- flagged upstream as a from:port ticket.
+# Absolute, not $HOME-relative: our install is always at root /Applications
+# (fleet policy), never $HOME/Applications. Needed build-host#107 upstream
+# (fixed) before this was readable at all.
+# shellcheck disable=SC2034  # read by bench-evidence.sh after it sources this file
 INSTALL_BIN='/Applications/Aleph One/Aleph One.app/Contents/MacOS/Aleph One'
 
 _ao_paths() {
@@ -65,6 +64,7 @@ set -u
 if [ ! -x "$AO_EXEC" ] || [ ! -f "$AO_FILM" ]; then
 	echo "BENCH FAIL: install or demo film missing"
 	echo "===BENCH_META==="
+	echo "EXIT=127"
 	echo "ALIVE=no"
 	echo "PID="
 	exit 0
@@ -75,7 +75,19 @@ rm -rf "$run_home"; mkdir -p "$run_home/home"
 ) > "$log_path" 2>&1 < /dev/null &
 pid=\$!
 sleep $secs
-alive=no; kill -0 "\$pid" 2>/dev/null && alive=yes
+# Real exit status, not just "still running": if the game already died
+# during our sleep (crash, early exit -- alephone#44's imac-g5 finding,
+# a stale pre-v1.2.0 install hanging silently with no fps-log output at
+# all), \`wait\` on a job this same shell backgrounded returns its actual
+# exit code without blocking, since it has already terminated. A still-
+# running process is EXIT=0 (launched fine, not yet finished) -- \`wait\`
+# is never called on it here, since that WOULD block.
+alive=no; ec=0
+if kill -0 "\$pid" 2>/dev/null; then
+	alive=yes
+else
+	wait "\$pid"; ec=\$?
+fi
 ( sleep 6
   osascript -e 'tell application "Aleph One" to quit' >/dev/null 2>&1 || true
   for i in 1 2 3 4 5; do kill -0 "\$pid" 2>/dev/null || exit 0; sleep 1; done
@@ -86,31 +98,29 @@ alive=no; kill -0 "\$pid" 2>/dev/null && alive=yes
 disown
 cat "$log_path"
 echo "===BENCH_META==="
+echo "EXIT=\$ec"
 echo "ALIVE=\$alive"
 echo "PID=\$pid"
 EOF
 )
-	local out meta_line alive pid
+	local out meta_line exitc alive pid
 	out="$(_ao_sh "$host" "$remote_cmd")"
 	meta_line="$(printf '%s\n' "$out" | grep -n '^===BENCH_META===$' | head -1 | cut -d: -f1)"
 
 	if [ -n "$meta_line" ]; then
 		printf '%s\n' "$out" | sed -n "1,$((meta_line - 1))p" > "$workdir/log.txt"
-		alive="$(printf '%s\n' "$out" | sed -n "$((meta_line + 1))p" | sed 's/^ALIVE=//')"
-		pid="$(printf '%s\n' "$out" | sed -n "$((meta_line + 2))p" | sed 's/^PID=//')"
+		exitc="$(printf '%s\n' "$out" | sed -n "$((meta_line + 1))p" | sed 's/^EXIT=//')"
+		alive="$(printf '%s\n' "$out" | sed -n "$((meta_line + 2))p" | sed 's/^ALIVE=//')"
+		pid="$(printf '%s\n' "$out" | sed -n "$((meta_line + 3))p" | sed 's/^PID=//')"
 	else
 		printf '%s\n' "$out" > "$workdir/log.txt"
-		alive=no; pid=
+		exitc=1; alive=no; pid=
 	fi
 
 	grep '^fps-log: [0-9]' "$workdir/log.txt" 2>/dev/null | sed 1d | awk '{print $2}' > "$workdir/stats.txt"
 	echo fps > "$workdir/stats.unit"
 
-	if grep -q '^BENCH FAIL' "$workdir/log.txt" 2>/dev/null; then
-		echo "EXIT=1"
-	else
-		echo "EXIT=0"
-	fi
+	echo "EXIT=${exitc:-unknown}"
 	[ "$alive" = yes ] && echo "PID=$pid" || echo "PID="
 }
 

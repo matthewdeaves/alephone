@@ -23,6 +23,15 @@
 #                           plus its two 3s-apart liveness samples, or those
 #                           land on an already-quitting process. Default 20
 #                           (alephone#45: 6 raced this on imac-g5).
+#   ALEPHONE_BENCH_FORCE_CLASSIC  set to 1 to export ALEPHONE_FORCE_CLASSIC_GL=1
+#                           into the remote launch, forcing the classic
+#                           fixed-function renderer instead of the shader one
+#                           (screen.cpp's existing diagnostic override,
+#                           BUGFIXES.md alephone#16 -- not a code change, a
+#                           preference toggle for telling a slow *engine*
+#                           renderer path from a slow *emulator* GL path on a
+#                           new host). Default unset (shader, whichever the
+#                           GPU/driver would pick unforced).
 #
 # qemu-tiger3d (alephone#46): the QemuMac VM host is just another ssh alias
 # to _ao_sh above -- no host-specific branch needed here. It is slower and
@@ -96,6 +105,8 @@ bench_launch() {
 	local quit_grace="${ALEPHONE_BENCH_QUIT_GRACE:-20}"
 	local run_home; run_home="$(_ao_run_home)"
 	local log_path; log_path="$(_ao_log_path)"
+	local force_classic=""
+	[ "${ALEPHONE_BENCH_FORCE_CLASSIC:-0}" = 1 ] && force_classic="ALEPHONE_FORCE_CLASSIC_GL=1 "
 
 	local remote_cmd
 	remote_cmd=$(cat <<EOF
@@ -109,7 +120,7 @@ if [ ! -x "$AO_EXEC" ] || [ ! -f "$AO_FILM" ]; then
 	exit 0
 fi
 rm -rf "$run_home"; mkdir -p "$run_home/home"
-( cd "$AO_APP_DIR" && HOME="$run_home/home" ALEPHONE_FPS_LOG=$log_secs ALEPHONE_FPS_TARGET=$target \
+( cd "$AO_APP_DIR" && HOME="$run_home/home" ALEPHONE_FPS_LOG=$log_secs ALEPHONE_FPS_TARGET=$target ${force_classic}\
 	exec "$AO_EXEC" -s --no-chooser -Q -l "$AO_DEMOS" "$AO_DATA" "$AO_FILM" \
 ) > "$log_path" 2>&1 < /dev/null &
 pid=\$!

@@ -13,6 +13,17 @@
 # GL tier this Mac gets. Claims the host through pick-bench-host.sh and
 # terminates every run with the same quit, TERM, KILL escalation as smoke-dmg.sh.
 #
+# host-alias also accepts qemu-tiger3d (alephone#46): the QemuMac VM on the
+# workstation, an emulated G4 7400 + Radeon 9700 PRO on Tiger 10.4, reached
+# over the ssh alias of the same name -- no code path here is host-specific,
+# this is a plain "any ssh-reachable Mac" alias like every other. Bring the
+# VM up first with `scripts/shared.sh qemu-vm.sh up` (it does not auto-boot
+# on claim yet, old-mac-build-host#121). The emulator is slower and noisier
+# than real hardware and its fps follows workstation load, so pass a longer
+# seconds-per-run than the 40s default (the Quake ports' equivalent bench.sh
+# uses 300s for this host) and treat single qemu-tiger3d runs as informal
+# unless corroborated on real hardware.
+#
 # -l/--replay-directory is passed with the launch (alephone#42): a game
 # launched headless this way never actually gains OS keyboard focus (the
 # launching shell has no controlling GUI session to hand it), so

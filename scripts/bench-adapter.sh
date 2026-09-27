@@ -24,6 +24,16 @@
 #                           land on an already-quitting process. Default 20
 #                           (alephone#45: 6 raced this on imac-g5).
 #
+# qemu-tiger3d (alephone#46): the QemuMac VM host is just another ssh alias
+# to _ao_sh above -- no host-specific branch needed here. It is slower and
+# less consistent than real hardware (emulated G4 7400 + Radeon 9700 PRO,
+# Tiger 10.4, fps follows workstation load), so bump ALEPHONE_BENCH_SECS and
+# ALEPHONE_BENCH_QUIT_GRACE well above their defaults when targeting it, the
+# same way the Quake ports' bench.sh gives this host a 300s timeout instead
+# of their usual per-class values. Bring the VM up first with
+# `scripts/shared.sh qemu-vm.sh up` (no auto-boot on claim yet,
+# old-mac-build-host#121).
+#
 # alephone#43 (build-host#105 pin migration): bench-evidence.sh now runs from
 # old-mac-build-host's pinned-revision cache (~/.cache/retro-shared/<sha>/),
 # not from this repo's scripts/ next to this file, so its own

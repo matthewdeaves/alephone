@@ -31,17 +31,18 @@
 #                           preference toggle for telling a slow *engine*
 #                           renderer path from a slow *emulator* GL path on a
 #                           new host). Default unset (shader, whichever the
-#                           GPU/driver would pick unforced).
+#                           GPU/driver would pick unforced). On qemu-tiger3d
+#                           defaults to 1, matching its installed VM profile.
+#                           Set 0 explicitly to reproduce the shader fault.
 #
 # qemu-tiger3d (alephone#46): the QemuMac VM host is just another ssh alias
-# to _ao_sh above -- no host-specific branch needed here. It is slower and
+# to _ao_sh above -- the classic GL default is VM-specific. It is slower and
 # less consistent than real hardware (emulated G4 7400 + Radeon 9700 PRO,
 # Tiger 10.4, fps follows workstation load), so bump ALEPHONE_BENCH_SECS and
 # ALEPHONE_BENCH_QUIT_GRACE well above their defaults when targeting it, the
 # same way the Quake ports' bench.sh gives this host a 300s timeout instead
 # of their usual per-class values. Bring the VM up first with
-# `scripts/shared.sh qemu-vm.sh up` (no auto-boot on claim yet,
-# old-mac-build-host#121).
+# `scripts/shared.sh qemu-vm.sh up`, or let the shared picker boot it on claim.
 #
 # alephone#43 (build-host#105 pin migration): bench-evidence.sh now runs from
 # old-mac-build-host's pinned-revision cache (~/.cache/retro-shared/<sha>/),
@@ -106,7 +107,9 @@ bench_launch() {
 	local run_home; run_home="$(_ao_run_home)"
 	local log_path; log_path="$(_ao_log_path)"
 	local force_classic=""
-	[ "${ALEPHONE_BENCH_FORCE_CLASSIC:-0}" = 1 ] && force_classic="ALEPHONE_FORCE_CLASSIC_GL=1 "
+	local classic_default=0
+	[ "$host" = qemu-tiger3d ] && classic_default=1
+	[ "${ALEPHONE_BENCH_FORCE_CLASSIC:-$classic_default}" = 1 ] && force_classic="ALEPHONE_FORCE_CLASSIC_GL=1 "
 
 	local remote_cmd
 	remote_cmd=$(cat <<EOF

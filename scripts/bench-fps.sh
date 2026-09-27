@@ -15,10 +15,9 @@
 #
 # host-alias also accepts qemu-tiger3d (alephone#46): the QemuMac VM on the
 # workstation, an emulated G4 7400 + Radeon 9700 PRO on Tiger 10.4, reached
-# over the ssh alias of the same name -- no code path here is host-specific,
-# this is a plain "any ssh-reachable Mac" alias like every other. Bring the
-# VM up first with `scripts/shared.sh qemu-vm.sh up` (it does not auto-boot
-# on claim yet, old-mac-build-host#121). The emulator is slower and noisier
+# over the ssh alias of the same name -- the VM uses classic GL by default to avoid Tiger
+# driver software shader fallback. ALEPHONE_BENCH_FORCE_CLASSIC=0 opts out.
+# The shared picker boots the VM on claim. The emulator is slower and noisier
 # than real hardware and its fps follows workstation load, so pass a longer
 # seconds-per-run than the 40s default (the Quake ports' equivalent bench.sh
 # uses 300s for this host) and treat single qemu-tiger3d runs as informal
@@ -56,12 +55,9 @@ is_local_host() {
 	esac
 }
 
-export BENCH_LOCK_CLAIM="${BENCH_LOCK_CLAIM:-alephone.bench.$$.$(date +%s)}"
-"$REPO_ROOT/scripts/shared.sh" pick-bench-host.sh --acquire "$HOST" "alephone #39 fps bench" >/dev/null || {
-	echo "bench-fps.sh: could not claim $HOST; see scripts/shared.sh pick-bench-host.sh --status" >&2
-	exit 1
-}
-trap '"$REPO_ROOT/scripts/shared.sh" pick-bench-host.sh --release "$HOST" >/dev/null 2>&1; true' EXIT
+if [ "${RETRO_BENCH_LOCK:-}" != "$HOST" ]; then
+    exec "$REPO_ROOT/scripts/shared.sh" pick-bench-host.sh --run "$HOST" alephone-fps -- "$0" "$@"
+fi
 
 # Refuse to launch into a locked/shielded console (old-mac-build-host#88):
 # the game never comes to the front there, so a "pass" would mean nothing.
@@ -83,10 +79,13 @@ else
 	RUN_REMOTE=(ssh "$HOST" bash -s --)
 fi
 
-"${RUN_REMOTE[@]}" "$ROUNDS" "$SECS" << 'REMOTE_BENCH'
+CLASSIC_DEFAULT=0
+[ "$HOST" = qemu-tiger3d ] && CLASSIC_DEFAULT=1
+"${RUN_REMOTE[@]}" "$ROUNDS" "$SECS" "${ALEPHONE_BENCH_FORCE_CLASSIC:-$CLASSIC_DEFAULT}" << 'REMOTE_BENCH'
 # No pipefail: Tiger's /bin/bash 2.05b rejects it.
 set -u
 ROUNDS="$1"; SECS="$2"
+[ "$3" = 1 ] && export ALEPHONE_FORCE_CLASSIC_GL=1
 APP_DIR="/Applications/Aleph One"
 EXEC="$APP_DIR/Aleph One.app/Contents/MacOS/Aleph One"
 DATA="$APP_DIR/Scenarios/Marathon 2"

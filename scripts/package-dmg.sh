@@ -264,7 +264,11 @@ EOF
 			fi
 		else
 			echo "WARNING: per-slice signing failed for $EXEC_PATH (llvm-lipo: ${LLIPO:-not found}), see /tmp/codesign-${GAME_NAME// /_}.log -- leaving fully unsigned" >&2
-			cat "/tmp/codesign-${GAME_NAME// /_}.log" >&2
+			# When $LLIPO is empty the loop above never runs, so this log is
+			# never created -- cat-ing it unconditionally used to trip set -e
+			# and abort the whole package on any host without llvm-lipo (e.g.
+			# workstation, arm64, no Homebrew llvm formula).
+			[ -f "/tmp/codesign-${GAME_NAME// /_}.log" ] && cat "/tmp/codesign-${GAME_NAME// /_}.log" >&2
 		fi
 		rm -rf "$TMPD"
 	elif codesign --force --deep -s - "$APP_DIR" 2>/tmp/codesign-${GAME_NAME// /_}.log; then

@@ -3,6 +3,41 @@
 One short entry per real bug fixed in this fork: what it was, what the fix was.
 Newest first.
 
+- **Radeon 9700 (R300): shader renderer unplayable (0.1 fps) via a CPU GLSL
+  fallback, same family as the confirmed Radeon 9600 fix below** (alephone#47).
+  Found on qemu-tiger3d (the QemuMac-emulated G4 7400 + Radeon 9700 PRO on
+  Tiger 10.4, matthewdeaves/qemu#10). Root cause is more specific than "shaders
+  are slow": `sprite.frag`/`wall.frag` branch per-pixel (an if/else on a
+  vertexColor threshold, and again to pick fog), and R300-class fragment
+  hardware has no branch instructions at all, so Tiger's ATI GLSL compiler
+  falls back to a full CPU interpreter (`PPEmulatorRun`) for the whole shader.
+  Fix: extended `screen.cpp`'s existing `known_bad_shader_gpu` `GL_RENDERER`
+  string match (the alephone#16 mechanism below) to also match "Radeon 9700",
+  so the engine picks the classic fixed-function renderer for this card by
+  default instead of needing `ALEPHONE_FORCE_CLASSIC_GL=1`. Also fixed a
+  `package-dmg.sh` bug hit while producing the test build: when `llvm-lipo`
+  isn't available at all (e.g. workstation, arm64, no Homebrew llvm formula),
+  the per-slice ppc-signing loop never runs and never creates its own log
+  file, but the code unconditionally `cat`'d that log under `set -e`, aborting
+  the whole package -- guarded the `cat` on the file actually existing.
+  Verified on qemu-tiger3d: with no bench-level override
+  (`ALEPHONE_BENCH_FORCE_CLASSIC=0`), a fresh first-run picked
+  `gl-tier: 0 (renderer 'ATI Radeon 9700 OpenGL Engine', classic, ...)` on its
+  own, and `bench-fps.sh` measured 30.3/60.3/139.1 fps at the 30/60/uncapped
+  targets (up from the unfixed build's 0.1 fps, confirmed on the same VM
+  before this patch). This is VM evidence only: no real R300-class Mac
+  (`imac-g5`, `g5-panther/tiger/desktop`, `quad-tiger/leopard`) was available
+  this session to reproduce or confirm on real hardware -- treat with the same
+  caution as any VM-only rendering finding until a real 9700/9800/X300-X600
+  confirms it. The mandatory `nm -arch ppc -u` weak-linking check
+  (`check-ppc-symbols.sh`) did not complete this session either: `mini-intel`
+  (the only host with the ppc cross-toolchain) was left with a stale lock by
+  an earlier interrupted attempt of this same check, and force-clearing
+  another session's build-host lock was correctly refused. The change adds no
+  new symbols (same `glGetString`/`strstr` pattern already used one line above
+  for the 9600/GMA 950 matches in this same function), so the risk is low, but
+  the check itself is still outstanding.
+
 - **bench-evidence.sh runs against real (not fast-dev-box) fleet hosts could
   read INVALID off a genuinely live, ticking, hash-verified run** (alephone#45).
   `bench-adapter.sh`'s `bench_launch` left the game running only 6s after

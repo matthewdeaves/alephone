@@ -1081,6 +1081,27 @@ static void change_screen_mode(int width, int height, int depth, bool nogl, bool
 		// 6.8-6.9 fps with ~150 ms frames. Both confirmed cards report a
 		// pre-2.0 GL core with GLSL only as extensions; whether that rule
 		// holds more widely is for the fleet benches, not a guess here.
+		//
+		// alephone#47, 2026-09-27: Radeon 9700 (R300, the same silicon
+		// family as the 9600/RV351 above) is the third confirmed card, this
+		// time via qemu-tiger3d (the QemuMac-emulated G4 7400 + Radeon 9700
+		// PRO on Tiger 10.4, matthewdeaves/qemu#10). Root cause is more
+		// specific here than "shaders are slow": sprite.frag/wall.frag
+		// branch per-pixel (an if/else on a vertexColor threshold and again
+		// to pick fog), and R300-class fragment hardware has no branch
+		// instructions at all -- Tiger's ATI GLSL compiler falls back to a
+		// full CPU interpreter (PPEmulatorRun) for the whole shader, not
+		// just the branchy part, measured at 0.1 fps (bundle
+		// 20260927T132024Z-68629). The classic renderer runs normally on
+		// the same emulated card. This is VM evidence only: no real
+		// R300-class Mac (imac-g5, g5-panther/tiger/desktop, quad-tiger/
+		// leopard) was available this session to reproduce it on real
+		// hardware -- treat it with the same caution as any VM-only
+		// rendering finding until a real 9700/9800/X300-X600 confirms it.
+		// Other R300-family parts (9500/9800, X300-X600) are, if anything,
+		// MORE plausible now that one sibling die is confirmed, but stay
+		// deliberately unlisted below for the same reason the 9600 comment
+		// above gives: don't add them without the same measurement.
 		bool known_bad_shader_gpu = false;
 #ifdef HAVE_OPENGL
 		// glGetString/GL_RENDERER need real GL headers, only pulled in
@@ -1089,7 +1110,7 @@ static void change_screen_mode(int width, int height, int depth, bool nogl, bool
 		// config, "GL_RENDERER was not declared in this scope").
 		{
 			const char *renderer = (const char *) glGetString(GL_RENDERER);
-			if (renderer && (strstr(renderer, "Radeon 9600") != NULL || strstr(renderer, "GMA 950") != NULL)) {
+			if (renderer && (strstr(renderer, "Radeon 9600") != NULL || strstr(renderer, "Radeon 9700") != NULL || strstr(renderer, "GMA 950") != NULL)) {
 				known_bad_shader_gpu = true;
 			}
 		}

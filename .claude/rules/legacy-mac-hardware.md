@@ -1,3 +1,14 @@
+---
+paths:
+  - "scripts/build*.sh"
+  - "scripts/*deps*.sh"
+  - "scripts/check-ppc-symbols.sh"
+  - "Source_Files/**/*.cpp"
+  - "Source_Files/**/*.h"
+  - "PORTING-PPC.md"
+  - "BUILD-HOST.md"
+---
+
 # Legacy Mac Hardware & Porting Facts
 
 - **SDL2 floor is 2.0.3, not 2.0.16.** AO calls zero APIs newer than 2.0.3; the one exception (`SDL_SoftStretchLinear`) already falls back to `SDL_BlitScaled`. The existing fleet trees (`panther-sdl2` 2.0.3 10.3.9, `leopard-sdl2` 2.0.6 10.5) already satisfy it — **no SDL2 fork needed.**

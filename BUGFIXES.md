@@ -1,532 +1,153 @@
 # Bug fixes
 
-One short entry per real bug fixed in this fork: what it was, what the fix was.
-Newest first.
+One entry per real bug fixed in this fork, newest first. Grep a ticket number (e.g. `alephone#47`) to find its entry.
 
-- **Radeon 9700 (R300): shader renderer unplayable (0.1 fps) via a CPU GLSL
-  fallback, same family as the confirmed Radeon 9600 fix below** (alephone#47).
-  Found on qemu-tiger3d (the QemuMac-emulated G4 7400 + Radeon 9700 PRO on
-  Tiger 10.4, matthewdeaves/qemu#10). Root cause is more specific than "shaders
-  are slow": `sprite.frag`/`wall.frag` branch per-pixel (an if/else on a
-  vertexColor threshold, and again to pick fog), and R300-class fragment
-  hardware has no branch instructions at all, so Tiger's ATI GLSL compiler
-  falls back to a full CPU interpreter (`PPEmulatorRun`) for the whole shader.
-  Fix: extended `screen.cpp`'s existing `known_bad_shader_gpu` `GL_RENDERER`
-  string match (the alephone#16 mechanism below) to also match "Radeon 9700",
-  so the engine picks the classic fixed-function renderer for this card by
-  default instead of needing `ALEPHONE_FORCE_CLASSIC_GL=1`. Also fixed a
-  `package-dmg.sh` bug hit while producing the test build: when `llvm-lipo`
-  isn't available at all (e.g. workstation, arm64, no Homebrew llvm formula),
-  the per-slice ppc-signing loop never runs and never creates its own log
-  file, but the code unconditionally `cat`'d that log under `set -e`, aborting
-  the whole package -- guarded the `cat` on the file actually existing.
-  Verified on qemu-tiger3d: with no bench-level override
-  (`ALEPHONE_BENCH_FORCE_CLASSIC=0`), a fresh first-run picked
-  `gl-tier: 0 (renderer 'ATI Radeon 9700 OpenGL Engine', classic, ...)` on its
-  own, and `bench-fps.sh` measured 30.3/60.3/139.1 fps at the 30/60/uncapped
-  targets (up from the unfixed build's 0.1 fps, confirmed on the same VM
-  before this patch). `check-ppc-symbols.sh` (10.3.9 SDK weak-linking gate)
-  reran clean afterward: 530 strong undefined, 0 weak, PASS -- the change
-  adds no new symbol dependencies.
-  Real-hardware follow-up (`imac-g5`, Leopard 10.5.8, once the user powered
-  it on): its actual card reports as `ATI Radeon 9600 OpenGL Engine` -- the
-  already-confirmed 9600 case below, not a literal 9700. Deployed the fixed
-  build there (`deploy-dmg.sh`) and ran a real `bench-fps.sh`: picked classic
-  mode unforced (`gl-tier: 0 (renderer 'ATI Radeon 9600 OpenGL Engine',
-  classic, ...)`), 30.3/59.9/59.8 fps at the 30/60/uncapped targets, clean.
-  This reconfirms the `known_bad_shader_gpu` mechanism and the R300-family
-  classic-fallback thesis on real R300-class hardware with no regression from
-  this change -- but it is NOT a real-hardware confirmation of the literal
-  "Radeon 9700" string match itself, since no real 9700/9800/X300-X600 card
-  was available. That specific string remains VM-evidence-only; treat with
-  the same caution as any VM-only rendering finding until a real 9700-family
-  card confirms it directly.
+## alephone#47 Radeon 9700 (R300): shader renderer 0.1 fps, now auto-picks classic GL
+Symptom: 0.1 fps on qemu-tiger3d (G4 + Radeon 9700 PRO, Tiger; qemu#10). sprite/wall.frag branch per-pixel; R300 -> CPU (PPEmulatorRun).
+Fix: screen.cpp known_bad_shader_gpu GL_RENDERER match (alephone#16) adds "Radeon 9700". package-dmg.sh: guard `cat` of absent lipo log.
+Verified qemu-tiger3d, no override: gl-tier 0 picked, 30.3/60.3/139.1 fps; check-ppc-symbols.sh PASS (530 strong, 0 weak).
+Real imac-g5 (Leopard 10.5.8, reports "Radeon 9600"): classic picked unforced, 30.3/59.9/59.8 fps, no regression.
+Caveat: the literal "Radeon 9700" match is VM-evidence-only; no real 9700/9800/X300-X600 card was available.
 
-- **bench-evidence.sh runs against real (not fast-dev-box) fleet hosts could
-  read INVALID off a genuinely live, ticking, hash-verified run** (alephone#45).
-  `bench-adapter.sh`'s `bench_launch` left the game running only 6s after
-  returning before asking it to quit, to give `bench-evidence.sh`'s own
-  post-return work (host-info/hash ssh round trips, frame captures, two
-  liveness pings 3s apart) time to sample a still-live process. On imac-g5
-  (real Leopard PowerPC, not a fast box) that overhead routinely ate 3-8s by
-  itself, so the quit (or its AppleScript Apple-Event delivery pausing the
-  game's own focus) had often already fired by sampling time -- measured as
-  both "liveness did not advance" and "frames byte-identical" on runs whose
-  `fps-log` showed real, continuously-advancing gameplay throughout (confirmed
-  with a 30s direct, unwrapped run against the same demo film). Widened the
-  grace period from a hardcoded 6s to a tunable `ALEPHONE_BENCH_QUIT_GRACE`,
-  default 20s.
+## alephone#45 bench-evidence.sh read INVALID on slow real hosts despite a live, verified run
+Symptom: "liveness did not advance" / "frames byte-identical" on imac-g5 while fps-log showed continuous gameplay.
+Cause: bench-adapter.sh bench_launch quit the game 6s after returning; ssh/hash/capture/ping overhead ate 3-8s on Leopard PPC.
+Fix: hardcoded 6s replaced by tunable ALEPHONE_BENCH_QUIT_GRACE, default 20s. Confirmed with a 30s direct unwrapped run.
 
-- **Intel GMA 950 Macs ran at about 1 fps by default** (alephone#39/#30).
-  The GPU advertises GLSL, so the shader renderer was chosen, but it has no
-  hardware vertex shaders (GL 1.4). Interleaved film replays on mini-intel
-  (Lion, 800x600, uncapped, 2 rounds, x86_64 and i386): shader 0.6-1.8 fps
-  with 0.9-1.8 s frames, classic fixed-function 6.8-6.9 fps with ~150 ms
-  frames. Added "GMA 950" to the measured list of GPUs that get classic GL
-  (next to "Radeon 9600"). That covers every Core Solo/Duo Mac the i386
-  slice exists for.
+## alephone#39 Intel GMA 950 Macs ran at about 1 fps by default (also alephone#30)
+Cause: GPU advertises GLSL so shader renderer was chosen, but it has no hardware vertex shaders (GL 1.4).
+mini-intel (Lion, 800x600, uncapped, x86_64+i386): shader 0.6-1.8 fps (0.9-1.8 s frames), classic 6.8-6.9 fps (~150 ms).
+Fix: added "GMA 950" to the classic-GL GPU list beside "Radeon 9600"; covers every Core Solo/Duo Mac the i386 slice targets.
 
-- **Passing a film (or any file) on the command line hung macOS startup
-  before the window opened** (alephone#39). The app sat frontmost with only a
-  menu bar and ignored Quit, which blocked the fps benches. `sample` showed
-  the main thread inside `SDL_Init`: SDL's `Cocoa_RegisterApp` calls
-  `[NSApp finishLaunching]` before it installs its app delegate, so AppKit
-  treated argv entries as documents with no delegate to claim them.
-  `NSDocumentController` then failed on the Info.plist's empty
-  `NSDocumentClass` and ran a modal error alert that never drew. Fixed by
-  registering `NSTreatUnknownArgumentsAsOpen=NO` before `SDL_Init`
-  (`system_disable_argv_document_open`, csalerts_darwin.cpp). Aleph One
-  already opens its own argv files. This uses plain objc-runtime C calls,
-  because the PPC toolchain has no Objective-C and the 10.3.9 SDK's
-  objc-runtime.h isn't valid C++. A/B on imac-2019 with the same command:
-  v1.1.0 stuck in `runModal` with 0 fps windows, fixed build replayed the
-  film (114 fps, tier 2).
+## alephone#39 Film/file passed on command line hung macOS startup before the window opened
+Symptom: app frontmost, menu bar only, ignored Quit; blocked fps benches. sample: main thread in SDL_Init, modal alert never drew.
+Cause: SDL Cocoa_RegisterApp calls [NSApp finishLaunching] before its delegate exists; argv taken as documents, NSDocumentClass empty.
+Fix: NSTreatUnknownArgumentsAsOpen=NO before SDL_Init (system_disable_argv_document_open, csalerts_darwin.cpp), plain objc-runtime C.
+A/B imac-2019: v1.1.0 stuck in runModal, 0 fps; fixed build replayed the film at 114 fps, tier 2.
 
-- **Release candidate could not launch at all on modern macOS whenever the
-  fat binary included a ppc slice** (alephone#34), found running the
-  imac-2019 (Sequoia) smoke check `CLAUDE.md` requires before any release.
-  `package-dmg.sh` deliberately shipped the *whole* app bundle unsigned, not
-  ad-hoc signed, whenever `lipo -archs` showed a ppc slice -- codesign can
-  touch a ppc slice's bytes, and the project wants those bytes pristine for
-  the ppc weak-linking check (`nm -arch ppc -u` vs the 10.3.9 symbol set).
-  On modern macOS, though, RunningBoard refuses to spawn a fully unsigned
-  process outright (measured live: `RBSRequestErrorDomain` code 5,
-  "Launchd job spawn failed" -- not a Gatekeeper warning, the process never
-  starts), and code review independently found the same line and noted
-  AMFI would refuse an unsigned arm64 Mach-O the same way on Apple Silicon.
-  Confirmed the cause by isolation before fixing: a signed, ppc-stripped
-  copy of the exact same binary launched fine via the identical path.
-  Fixed by signing only the non-ppc slices of the executable (thin out
-  ppc, ad-hoc `codesign` the rest, `lipo` the untouched ppc slice back in)
-  instead of skipping signing entirely -- verified the ppc slice's bytes
-  are sha256-identical before and after, then verified the fix itself with
-  a real deploy + LaunchServices launch on imac-2019 (SMOKE PASS, process
-  stays running 10s+). Not verified on real arm64 hardware.
+## alephone#34 Release candidate could not launch on modern macOS when fat binary had a ppc slice
+Found in imac-2019 (Sequoia) smoke check. Cause: package-dmg.sh shipped bundle fully unsigned if ppc present; RunningBoard refuses (code 5).
+Isolation: a signed, ppc-stripped copy of the same binary launched fine.
+Fix: thin out ppc, ad-hoc codesign the rest, lipo the untouched ppc slice back (sha256-identical before/after).
+Verified real deploy + LaunchServices launch on imac-2019 (SMOKE PASS, alive 10s+).
+Caveat: not verified on real arm64 hardware.
 
-- **PPC/Leopard on ATI R300-class cards: shader renderer unplayably slow
-  (~0.5fps) despite the driver reporting full GLSL support** (alephone#16).
-  Reported repeatedly on real `imac-g5` hardware (ATI Radeon 9600/RV351)
-  while the same build "played lovely" on `mini-g4` (older GPU, correctly
-  falls back to the classic renderer). Two real, separate contributors,
-  found in that order:
-  1. `RenderRasterize_Shader::render_node_floor_or_ceiling` and
-     `render_viewer_sprite` drew with `GL_POLYGON`, a primitive type badly
-     supported on legacy hardware, `sample`-profiled at real gameplay time
-     landing 28% of samples in Apple's software-rendering-plugin fallback
-     (`gleFallbackBegin`). Fixed by switching to `GL_TRIANGLE_FAN`/
-     `GL_QUADS` (commit 675a0ea6). This helped (user-confirmed: "a little
-     bit better") but did not fix the actual problem — the dominant cost
-     was elsewhere.
-  2. The real dominant cost, found by re-profiling real gameplay with fix
-     #1 already applied: `RenderRasterize_Shader::render_node_object`
-     (drawing every in-world sprite — monsters, items, weapons) uses a real
-     GLSL shader (`Shader::S_Sprite` etc. via `setupSpriteTexture`). Apple's
-     Leopard-era ATI R300 driver advertises `GL_ARB_fragment_shader` /
-     `GL_ARB_shading_language_100` and passes every capability check the
-     game does at startup — but at *runtime* it silently executes that
-     shader through a software LLVM interpreter
-     (`gldLLVMFPTransformFallback` -> `glvmInterpretFPTransformFour`) one
-     fragment at a time instead of on the GPU. `sample` showed ~15% of
-     render-thread time in that single call chain; the "sort by top of
-     stack" summary was dominated by `glvm*`/LLVM-register-allocator
-     symbols, not game code. There is no portable way to query "will this
-     GPU actually run my shader in hardware" in advance — extension
-     presence says nothing about it. Fixed in `screen.cpp`'s renderer setup
-     with a targeted `GL_RENDERER` string match ("Radeon 9600") that forces
-     the classic fixed-function renderer (`Rasterizer_OGL_Class`/
-     `OGL_Render.cpp`, dormant since 2009 but still fully wired up and, on
-     this exact driver, genuinely hardware-accelerated) instead of the
-     shader renderer. Verified three ways on real `imac-g5` hardware: (a) a
-     fresh 30s gameplay `sample` after the fix shows zero
-     `gldLLVMFPTransformFallback`/`glvmInterpretFPTransformFour` hits, with
-     the render thread now mostly idle/waiting rather than pegged; (b) the
-     same result with the renderer forced manually via
-     `ALEPHONE_FORCE_CLASSIC_GL=1` (kept as a diagnostic override for
-     testing other suspect GPUs, since more R300-family parts — 9500/9700/
-     9800, X300-X800 — are plausible candidates for the same bug but are
-     NOT confirmed and deliberately not blocklisted without the same kind
-     of real-hardware measurement); (c) the user's own real playtest,
-     first "still not playable" with only fix #1, then "totally playable"
-     and "playing lovely" with fix #2, both with and without the env var
-     forcing it.
+## alephone#16 PPC/Leopard ATI R300: shader renderer ~0.5 fps despite full GLSL reported
+Real imac-g5 (Radeon 9600/RV351) unplayable; mini-g4 (older GPU, classic renderer) "played lovely". Two causes:
+1) Shader floor/ceiling + viewer sprite used GL_POLYGON (28% in gleFallbackBegin); GL_TRIANGLE_FAN/GL_QUADS (675a0ea6), small gain.
+2) Sprite GLSL (Shader::S_Sprite) ran in driver software interpreter (gldLLVMFPTransformFallback, glvmInterpretFPTransformFour).
+Fix: screen.cpp GL_RENDERER "Radeon 9600" forces classic Rasterizer_OGL_Class/OGL_Render.cpp; ALEPHONE_FORCE_CLASSIC_GL=1 overrides.
+Verified real imac-g5: no fallback hits in sample, playtest "totally playable". Other R300 parts (9500-9800, X300-X800) unconfirmed.
 
-- **PPC/Leopard: two separate 100%-reproducible SIGILL crashes on every
-  launch** (alephone#11), found chasing "human double-click launch
-  unreliable" (alephone#5) onto real `imac-g5` (10.5.8) hardware. Both
-  confirmed via the live macOS crash reporter's own Binary Images list
-  (authoritative — not offline symbolication against a possibly-mismatched
-  slice), both reproduced independently by an automated test and by the
-  user's own manual Finder launch (identical crash address both times), both
-  verified fixed by a 15s+ direct run on the real machine afterward.
-  1. `boost::property_tree::iptree`'s default comparator (`less_nocase`)
-     calls `std::toupper(ch, locale)` — a virtual dispatch through a
-     `std::locale` facet. This PPC/GCC14 cross-toolchain miscompiles that
-     indirect call: the crashed thread's `ctr` register (PPC's indirect-call
-     target) pointed into `__cxxabiv1::__class_type_info` RTTI data instead
-     of real code. Every MML/XML config file load goes through this
-     (`InfoTree : iptree`), so every game hit it on Leopard. Fixed with a
-     locale-free ASCII `toupper()` in the header-only comparator
-     (`scripts/patches/boost-1.76.0-less_nocase-no-locale.patch`, applied by
-     both `build-deps-ppc.sh` and `build-deps-intel.sh` right after boost's
-     headers are staged, so it survives a from-scratch dependency rebuild).
-  2. A second, related crash immediately followed the first fix:
-     `std::basic_istream<char>::operator>>(short&)` (via
-     `boost::property_tree`'s `stream_translator`, used for every typed XML
-     attribute) — same virtual-dispatch-into-garbage signature. Root cause,
-     confirmed by checking which loaded image the crash PC actually fell in:
-     Leopard's own `AudioToolbox`/`CoreAudio`/`OpenGL` frameworks (all three
-     required, no way around linking them) each transitively link the
-     *system* `/usr/lib/libstdc++.6.dylib` (verified with `otool -L` against
-     each framework on real hardware). Despite `-static-libstdc++
-     -static-libgcc`, some libstdc++ symbol references were still resolving
-     into that reachable dynamic copy instead of our static archive — two
-     ABI-incompatible C++ runtimes' RTTI/locale objects crossing that
-     boundary. Fixed with `-Wl,-force_load` on the toolchain's own
-     `libstdc++.a`/`libgcc.a`, so every symbol in both becomes part of the
-     binary unconditionally and there's no unresolved reference left for the
-     system dylib to satisfy.
-  **Not fully resolved**: after both fixes, direct launch on `imac-g5` now
-  survives past both crash points but shows repeated `malloc: *** error ...
-  Non-aligned pointer being freed` warnings. Same symptom class this ticket
-  was originally opened for (Marathon Infinity malloc corruption on
-  mini-g4/quicksilver's software-renderer path), now also seen on Marathon 1
-  on PPC/Leopard. Didn't crash the process in a 15s test window, but this is
-  real memory corruption, not resolved — separate investigation needed,
-  likely a genuine PPC struct-alignment/big-endian bug given the pattern.
+## alephone#11 PPC/Leopard: two 100%-reproducible SIGILL crashes on every launch (from alephone#5)
+Real imac-g5 (10.5.8), crash-reporter Binary Images; both fixed, verified by 15s+ direct runs.
+1) boost iptree less_nocase std::toupper(ch, locale): GCC14 PPC miscompiles. scripts/patches/boost-1.76.0-less_nocase-no-locale.patch.
+2) istream>>(short&) via stream_translator: system libstdc++.6.dylib (via AudioToolbox etc.) wins. Fix: -Wl,-force_load libstdc++.a/libgcc.a
+Then unresolved: `malloc: *** error ... Non-aligned pointer being freed` (also Marathon 1); suspect PPC struct-alignment/big-endian bug.
+Follow-up: the -unexported_symbols_list entry (also alephone#11) below.
 
-- **x86_64 slice: `dyld: Library not loaded` on every machine that isn't the
-  build host** (alephone#5), found on `imac-2019` (Sequoia) — the actual P0
-  launch target, not a synthetic test. The x86_64 slice dynamically links
-  `libSDL2-2.0.0.dylib` via a bare build-host-absolute path
-  (`/Users/mini/oldmac/sdl2-x86_64/lib/...`) — every other dependency
-  (`SDL2_ttf`, boost, asio, `libsndfile`, `openal-soft`) statically links; only
-  SDL2 itself is a pre-existing shared-lib tree referenced by
-  `--with-sdl-prefix`. Worked by pure coincidence on any machine that
-  happened to share that exact directory layout (e.g. the build host itself),
-  crashed at launch everywhere else. Fixed: `build.sh` fetches the actual
-  `.dylib` alongside the compiled x86_64 binary and retargets its load
-  command to `@executable_path` on the **thin** slice, before `lipo` — Apple's
-  current `install_name_tool` cannot parse this PPC cross-compiled slice's
-  load commands at all (`malformed load command 0 (cmdsize is zero)`) and
-  aborts on the whole fat binary once ppc is lipo'd in, so the retarget has
-  to happen before that point, not after in `package-dmg.sh`.
-  `package-dmg.sh` bundles the retargeted `.dylib` into each app's
-  `Contents/Frameworks/`, matching the same self-contained shape quakespasm
-  ships `SDL.framework` in.
+## alephone#5 x86_64 slice: `dyld: Library not loaded` on every machine but the build host
+Found on imac-2019 (Sequoia). Cause: linked libSDL2-2.0.0.dylib by absolute path /Users/mini/oldmac/sdl2-x86_64/lib/...; other deps static.
+Fix: build.sh fetches the .dylib and retargets its load command to @executable_path on the THIN slice before lipo.
+Must precede lipo: current install_name_tool fails on the ppc slice ("malformed load command 0 (cmdsize is zero)").
+package-dmg.sh bundles the dylib into Contents/Frameworks/ (same shape as quakespasm's SDL.framework).
 
-- **`package-dmg.sh`'s version-string collision between client and server
-  tags** (alephone#9). `git describe --tags --always --dirty` picks the
-  nearest tag by commit ancestry regardless of namespace — once
-  `server-v1.0.0` (alephone#9) landed on the same commit as a client DMG
-  build, a bare `git describe` named the *client* DMG
-  `Marathon-OldMac-server-v1.0.0.dmg`. Fixed by restricting each script's
-  `git describe --match` pattern to its own tag namespace
-  (`release-*`/`v[0-9]*` for the client, `server-v*` for the server).
+## alephone#9 package-dmg.sh version string collided between client and server tags
+Symptom: with server-v1.0.0 on the same commit, client DMG was named Marathon-OldMac-server-v1.0.0.dmg.
+Cause: `git describe --tags --always --dirty` picks nearest tag regardless of namespace.
+Fix: restrict each script's `git describe --match` to its namespace (release-*/v[0-9]* client, server-v* server).
 
-- **First server-v1.0.0 release shipped with no systemd unit and a fabricated
-  CLI usage doc** (alephone#9) — caught by `retro-server-infra` before
-  deploying, not after. `README.txt`'s `-p/-n/-m/-g` flags never existed;
-  real usage (measured from `standalone_hub_main.cpp`) is one positional
-  port number, nothing else. Added a real `systemd/alephone-server.service`
-  to the tarball, deliberately **without** the console-FIFO-on-fd-3 pattern
-  the other four ports' units use: `standalone_hub`'s main loop never reads
-  stdin at all (measured, full read of the source) — wiring a FIFO anyway
-  would silently discard everything written to it, exactly the false-success
-  packaging pattern infra's deploy tooling exists to catch. Also not
-  self-hosting: a real Aleph One client must still complete a GUI-only
-  "gatherer" handshake before any match starts; nothing scripts that today.
+## alephone#9 First server-v1.0.0 shipped with no systemd unit and a fabricated CLI usage doc
+Caught by retro-server-infra pre-deploy. README.txt -p/-n/-m/-g never existed; real usage (standalone_hub_main.cpp) is one positional port.
+Fix: added systemd/alephone-server.service, deliberately without console-FIFO-on-fd-3 (standalone_hub never reads stdin).
+Caveat: not self-hosting; a real client must still complete a GUI-only "gatherer" handshake before a match, unscripted.
 
-- **DMGs built by `package-dmg.sh` could not be mounted at all on real 10.3.9
-  Panther hardware** (`hdiutil: attach failed - no mountable file systems`)
-  (alephone#5, alephone#7). `hdiutil create` with no explicit `-layout`
-  defaults to GPT (protective MBR + GUID partition table) on any reasonably
-  modern build host (verified on macOS 26.x here) — GPT postdates every
-  PowerPC Mac; it was introduced for the first Intel Macs in 2006. Tiger
-  10.4+ can read GPT (it had to, to support early Intel Macs), which is
-  exactly why this went unnoticed until testing landed on a real G3 running
-  Panther. Fix: `hdiutil create ... -layout SPUD`, which is hdiutil's name
-  for the classic Apple Partition Map. Verified mounting on real 10.3.9
-  hardware before and after the fix (fails/succeeds respectively), and that
-  Tiger and later still mount it fine.
+## alephone#5 DMGs could not mount on real 10.3.9 Panther (also alephone#7)
+Error: `hdiutil: attach failed - no mountable file systems`. Cause: `hdiutil create` defaults to GPT (2006, Intel Macs); Tiger+ reads it.
+Fix: `hdiutil create ... -layout SPUD` (Apple Partition Map).
+Verified on real 10.3.9 before (fails) and after (mounts); Tiger and later still mount it.
 
-- **Every DMG this pipeline built was software-renderer-only, on every architecture** (alephone#6).
-  `scripts/build.sh` hardcoded `--disable-opengl` for both the ppc and x86_64
-  configure invocations. Not a PPC-only issue: this forced software rendering
-  fleet-wide regardless of GPU. Fix: drop the flag, let configure auto-detect.
+## alephone#6 Every DMG was software-renderer-only on every architecture
+Cause: scripts/build.sh hardcoded --disable-opengl for both the ppc and x86_64 configure runs (not PPC-only).
+Fix: drop the flag, let configure auto-detect.
 
-- **PPC cross-compile broke once OpenGL was enabled: CoreFoundation pulled in
-  `dispatch/dispatch.h`, which doesn't exist pre-10.6** (alephone#6).
-  `configure.ac`'s Darwin OpenGL block hardcodes `-F/System/Library/Frameworks`
-  (the build host's own absolute path), which shadows the target SDK's own
-  frameworks during cross-compilation and pulls in the *host's* modern
-  `CoreFoundation.framework` instead of the 10.3.9 SDK's. Verified empirically
-  that plain `-isysroot` (already in the build flags) resolves SDK frameworks
-  correctly on its own — removed the explicit path entirely.
+## alephone#6 PPC cross-compile with OpenGL on pulled dispatch/dispatch.h (absent pre-10.6)
+Cause: configure.ac Darwin OpenGL block hardcodes -F/System/Library/Frameworks, shadowing the 10.3.9 SDK with host CoreFoundation.
+Fix: removed the explicit path; plain -isysroot (already set) resolves SDK frameworks (verified empirically).
 
-- **PPC link failed once OpenGL was enabled: `GL_EXT_framebuffer_object` and
-  several GL2 shader-status symbols don't exist in the MacOSX10.3.9 SDK's
-  linkable stub** (alephone#6). They post-date that SDK. Fixed two ways:
-  `OGL_Shader.cpp` mixed ARB-suffixed shader calls (which the 10.3.9 stub
-  does export) with plain GL2 core calls for status/error-log queries (which
-  it doesn't) — switched those to the consistent ARB names
-  (`glGetObjectParameterivARB`/`glGetInfoLogARB`/`glDeleteObjectARB`), which
-  is a real correctness fix independent of PPC (mixing ARB object handles
-  with core-GL2 entry points is undefined behavior generally, it happened to
-  work on newer SDKs by luck). `OGL_FBO.cpp`'s `EXT_framebuffer_object` calls
-  have no such ARB predecessor to fall back to, so those are now resolved at
-  runtime via `SDL_GL_GetProcAddress` with a safe no-op fallback — which also
-  closes a latent crash: `Rasterizer_Shader.cpp` constructs an `FBOSwapper`
-  unconditionally with no capability check at all, so any GPU/driver
-  genuinely lacking the extension was one segfault away regardless of SDK
-  target.
+## alephone#6 PPC link with OpenGL: GL_EXT_framebuffer_object, GL2 status symbols not in 10.3.9 stub
+Fix 1: OGL_Shader.cpp mixed ARB and core-GL2 calls; now glGetObjectParameterivARB/glGetInfoLogARB/glDeleteObjectARB (mixing is UB anyway).
+Fix 2: OGL_FBO.cpp EXT_framebuffer_object has no ARB fallback; resolved via SDL_GL_GetProcAddress with a safe no-op fallback.
+Also closes a latent crash: Rasterizer_Shader.cpp constructs FBOSwapper unconditionally with no capability check.
 
-- **PPC cross-build could non-deterministically try to regenerate
-  `aclocal.m4`/`configure` with `aclocal-1.18`, which isn't installed on the
-  build host** (alephone#6, hit while testing). `rsync` doesn't preserve
-  autotools' required dependency-order mtimes between `configure.ac` and its
-  generated output, and without `AM_MAINTAINER_MODE` the regen rules are
-  always live. Fixed in `scripts/build.sh` by forcing pre-generated-tree
-  mtime order (`touch` sources older, generated files newer) right after
-  rsync, for both the ppc and x86_64 remote build steps.
+## alephone#6 PPC cross-build sometimes regenerated aclocal.m4/configure with absent aclocal-1.18
+Cause: rsync loses autotools dependency-order mtimes; without AM_MAINTAINER_MODE the regen rules are always live.
+Fix: scripts/build.sh touches sources older and generated files newer right after rsync, for ppc and x86_64.
 
-- **DMG packaging had no code signing or quarantine handling at all**
-  (alephone#5). On modern macOS an unsigned, unnotarized app downloaded/moved
-  onto a Mac commonly fails with a false "app is damaged, move to trash"
-  dialog instead of the milder "unidentified developer" prompt. Added ad-hoc
-  codesigning (`codesign --force --deep -s -`) and quarantine stripping
-  (`clear-launch-quarantine.sh`, a shared primitive from old-mac-build-host)
-  to `package-dmg.sh`. Verified: took `imac-2019` (Sequoia) from launching
-  nothing at all to a real running process via LaunchServices `open`. Note:
-  `spctl -a -vv` still reports `rejected` there — ad-hoc signing alone does
-  not satisfy Sequoia's default Gatekeeper policy without a paid Developer ID
-  + notarization, which is out of scope (no Apple developer account, £0
-  hosting policy). The realistic remaining gap is a one-time right-click-Open
-  workaround, not full elimination of the prompt.
+## alephone#5 DMG packaging had no code signing or quarantine handling
+Symptom: unsigned app on modern macOS commonly shows false "app is damaged, move to trash".
+Fix: package-dmg.sh adds ad-hoc `codesign --force --deep -s -` + quarantine stripping (clear-launch-quarantine.sh, old-mac-build-host).
+Verified: imac-2019 (Sequoia) went from launching nothing to a running process via LaunchServices `open`.
+Caveat: `spctl -a -vv` still says rejected (no Developer ID/notarization, out of scope); one-time right-click-Open remains.
 
-- **`scripts/deploy-dmg.sh`/`smoke-dmg.sh` (new): several remote-shell
-  portability bugs found writing them against real fleet OSes.** `set -o
-  pipefail` aborts outright with "invalid option name" on Tiger's stock bash
-  2.05b, silently leaving `-e`/`-u` unset too since bash applies none of a
-  `set` command's flags when one is invalid — dropped it from the remote
-  heredocs. `open -g` (background launch) doesn't exist on Tiger/Panther's
-  `open` and it mishandles the unrecognized flag by silently dropping the
-  real path argument rather than erroring — dropped `-g`. `pgrep` doesn't
-  exist pre-Leopard-ish; replaced with a portable `ps -Awww -o command= | grep`
-  (`www` to defeat `ps`'s COMMAND-column truncation, which produced a false
-  "process not running" against a 23-character path cut down to 10 chars in
-  testing). `open`-over-SSH does not launch anything at all on Tiger/Panther
-  (control-tested with Apple's own Chess.app: launches fine over SSH on Snow
-  Leopard, launches nothing at all — no error, no process — on Tiger), so a
-  FAIL from these scripts on a 10.3/10.4 target does not prove a packaging
-  bug; only a real console double-click does there. Unconditionally calling
-  `osascript -e 'tell application X to quit'` is also unsafe: it launches X
-  first if X isn't already running (a classic AppleScript gotcha) and then
-  hangs waiting on that launch — gated all quit attempts on the process
-  actually being confirmed running first.
+## (no ticket) deploy-dmg.sh/smoke-dmg.sh remote-shell portability bugs on real fleet OSes
+`set -o pipefail` errors on Tiger bash 2.05b and leaves -e/-u unset: dropped. `open -g` on Tiger/Panther drops the path arg: dropped.
+`pgrep` absent pre-Leopard: use `ps -Awww -o command= | grep` (www avoids COMMAND truncation and false "not running").
+Bare `osascript ... to quit` launches X then hangs: gate on process confirmed running.
+`open` over SSH launches nothing on Tiger/Panther (Chess.app control): FAIL there is no proof of a packaging bug; use console double-click.
 
-- **Game died at launch when SDL2 was built `--disable-joystick`** (alephone#2).
-  `shell.cpp` passed `SDL_INIT_JOYSTICK|SDL_INIT_GAMECONTROLLER` in one combined
-  `SDL_Init` and called `exit(1)` on any failure; a joystick-less SDL (every
-  fleet PPC tree) errors on exactly those flags with video and audio fine.
-  Fix: retry `SDL_Init` without the joystick flags on failure and log it —
-  gamepads light up iff the SDL2 slice supports them. Mechanism verified
-  against a real `--disable-joystick` SDL 2.30.10 build (init fails with
-  "SDL not built with joystick support", base retry succeeds).
+## alephone#2 Game died at launch when SDL2 was built --disable-joystick
+Cause: shell.cpp passed SDL_INIT_JOYSTICK|SDL_INIT_GAMECONTROLLER in one SDL_Init, exit(1) on failure (fleet PPC SDL trees lack joystick).
+Fix: retry SDL_Init without joystick flags and log it; gamepads work iff the SDL2 slice supports them.
+Verified against a real --disable-joystick SDL 2.30.10 ("SDL not built with joystick support", retry succeeds).
 
-- **Autotools build on macOS never linked the Cocoa platform files.**
-  `csalerts_sdl.cpp`/`cspaths_sdl.cpp` expect `system_alert_user`,
-  `get_application_name` etc. from `csalerts.mm`/`cspaths.mm` when SDL defines
-  `__MACOSX__`, but `Source_Files/CSeries/Makefile.am` only listed the `.mm`
-  files as `EXTRA_` sources, so every Darwin autotools link failed with
-  undefined symbols (upstream only builds macOS via Xcode). Fix: new
-  `TARGET_DARWIN` automake conditional in `configure.ac` adds them to
-  `libcseries_a_SOURCES` on `*-darwin*`. Matters here because the PPC cross
-  build goes through autotools, not Xcode.
+## (no ticket) Autotools build on macOS never linked the Cocoa platform files
+Cause: csalerts_sdl.cpp/cspaths_sdl.cpp need csalerts.mm/cspaths.mm symbols; Makefile.am listed them only as EXTRA_; Darwin links failed.
+Fix: new TARGET_DARWIN automake conditional in configure.ac adds them to libcseries_a_SOURCES on *-darwin*.
+Matters because the PPC cross build uses autotools, not Xcode (upstream builds macOS only via Xcode).
 
-- **`-Wl,-exported_symbols_list` (alephone#11's Leopard libstdc++-collision
-  fix, `4ab82a53`) fixed real Leopard hardware but broke real Tiger hardware
-  100% of the time — reverted same day.** Verified the fix itself first, on
-  the actual engine binary (not the earlier synthetic repro): real imac-g5
-  run, `DYLD_PRINT_BINDINGS`, 188 cross-image `libstdc++.6.dylib` binds down
-  to 0, reached hardware OpenGL init, no crash-reporter entry. Then ran the
-  identical binary on real mini-g4 (Tiger 10.4.11) as part of the same
-  verification pass, since the fat binary's one ppc slice has to run on both
-  — 100% reproducible `EXC_BAD_ACCESS`/`KERN_PROTECTION_FAILURE` at process
-  *startup*, before any application code runs (crash trace:
-  `_malloc_initialize` <- `calloc` <- `dwarf2_unwind_dyld_add_image_hook` <-
-  dyld's `imageNotification`/`registerAddCallback` <-
-  `__keymgr_dwarf2_register_sections` <- `_start`). Confirmed a real
-  regression, not pre-existing: the identical binary minus this one flag ran
-  2+ minutes on the same mini-g4 hardware without it (still shows the
-  original malloc-corruption warnings this ticket opened with, but doesn't
-  hard-crash at launch). Tiger's dyld (46.16, much older than Leopard's)
-  apparently needs something in the exported-symbol table that restricting
-  it to just `_main` strips, for its DWARF-unwind image-registration
-  handshake. Reverted the flag; `scripts/ppc-exported-symbols.txt` is left
-  in the tree, just unreferenced, for a follow-up that finds a narrower
-  export list safe on both OS versions. Leopard is back to the
-  already-documented (not new) locale/libstdc++ collision this ticket is
-  still open for.
+## alephone#11 Leopard libstdc++ collision: -unexported_symbols_list deny-list replaced allow-list
+Superseded first try -Wl,-exported_symbols_list (4ab82a53; fixed Leopard, crashed Tiger at startup): docs/archive/BUGFIXES-superseded.md.
+Final fix: deny-list of libstdc++.a/__gnu_cxx/__cxxabiv1 symbols, scripts/ppc-libstdcxx-unexport-list.txt (~11.2k, `nm -m`); libgcc.a kept.
+Real hw: imac-g5 (Leopard) 0 libstdc++.6.dylib cross-image binds (was 188), 45s soak, no malloc warnings; mini-g4 (Tiger) 18s/45s, no crash.
+Residual risk: ~200 reverse binds (~istream/~ostream, string _Rep, locale facet ids) now hit SYSTEM libstdc++; no crash seen.
+Synthetic repro missed this; recorded on alephone#11, not called fully fixed.
 
-- **Follow-up, same day: `-Wl,-unexported_symbols_list` deny-list replaces
-  the failed allow-list, real-hardware tested on both OSes — real
-  improvement, not a fully closed loop.** Buildhost's hypothesis: an
-  ALLOW-list (only `_main` exported) hid too much, including whatever
-  libgcc.a/runtime-support symbol Tiger's dyld needs for its DWARF-unwind
-  registration handshake; a DENY-list naming only libstdc++.a/`__gnu_cxx`/
-  `__cxxabiv1` symbols (`scripts/ppc-libstdcxx-unexport-list.txt`, generated
-  from our own baseline ppc binary via `nm -m`, ~11.2k symbols) should hide
-  the real collision surface without touching libgcc.a. Rebuilt and verified
-  on real hardware, not the synthetic repro this time: **imac-g5** (Leopard)
-  — 0 of the original-direction `libstdc++.6.dylib:...$lazy_ptr = Aleph
-  One:...` binds (down from 188), 45s soak with continuous forward progress
-  (real GL shader-compilation activity — `libGLProgrammability.dylib`,
-  `glvm*` — not a stuck/spinning process), zero malloc-corruption warnings,
-  no new crash-reporter entry. **mini-g4** (Tiger) — two separate runs
-  (18s, 45s), no crash, no crash-reporter entry at all (vs. instant SIGBUS
-  with the allow-list attempt).
-  **Real caveat found that the synthetic repro didn't surface**: the
-  deny-list also causes a NEW, opposite-direction cross-image bind class —
-  our own code's weak references to symbols we just unexported (stream
-  destructors `~istream`/`~ostream`/`~iostream`, `std::string::_Rep`
-  sentinel statics, locale facet `id`s for `moneypunct`/`collate`/
-  `num_get`/`num_put`/`time_get`/`time_put`/`messages`, `__gnu_cxx` concept-
-  check no-ops) now resolve into the SYSTEM's `libstdc++.6.dylib` instead of
-  our statically-linked copy — the same ABI-mismatch risk class this whole
-  investigation started from, just reversed. ~200 such binds measured on
-  imac-g5 in the 45s trace. Did not manifest as a crash or corruption in
-  testing performed (including exercising the original crash site —
-  `ScenarioChooser::add_directory`'s ifstream construct/destruct, which
-  happens early in this same run), but this is real residual risk, not a
-  clean zero, and wasn't caught by buildhost's minimal synthetic test
-  because it didn't exercise real iostream/string/locale-facet code the way
-  the actual engine does. Recorded on alephone#11 rather than silently
-  accepted as fully fixed.
+## (no ticket) deploy-dmg.sh aborted on yosemite (Panther 10.3.9) before quarantine-clear
+Cause: `hdiutil detach <mountpoint-path>` always fails there ("No such file or directory"); by device node works. `set -eu` aborted.
+Diagnosed by buildhost with `bash -x`. Effect: apps copied but never quarantine-cleared.
+Fix: quarantine-clear now runs before detach; detach uses device node from `mount` first, falls back to path, warns instead of aborting.
 
-- **`scripts/deploy-dmg.sh` aborted the whole deploy on `yosemite` (Panther
-  10.3.9) — apps got copied but never quarantine-cleared.** `hdiutil detach
-  <mountpoint-path>` fails outright on this box ("detach failed - No such
-  file or directory"), every time, any path form tried; detaching the same
-  mount by device node works first try (real Panther `hdiutil` quirk,
-  diagnosed and reproduced by buildhost with `bash -x`, not guessed). Under
-  `set -eu` that failure aborted the script right at the unguarded `hdiutil
-  detach` call, before the quarantine-clear loop that ran after it ever got
-  a chance — apps sitting un-quarantine-cleared on a machine someone's about
-  to double-click is worse than a DMG staying mounted. Fix: reordered so
-  quarantine-clear runs before detach, and detach now looks up the device
-  node from `mount`'s own output first (falling back to the path form),
-  with either attempt logging a warning instead of aborting the script.
+## alephone#17 arm64 slice: configure.ac linked -framework AGL, gone from Xcode 26 SDK
+Error: `ld: framework 'AGL' not found`. AGL is unused Carbon-era (remaining Source_Files hits are changelog comments); SDL2 owns GL context.
+Fix: probe with a real AC_LINK_IFELSE check; older PPC/Intel SDKs still link AGL, only sysroots lacking it (arm64) drop it.
 
-- **arm64 slice (alephone#17): `configure.ac` unconditionally linked
-  `-framework AGL` for any Darwin target, and AGL.framework is gone entirely
-  from Xcode 26's SDK.** Building the new native arm64 slice failed at link
-  time: `ld: framework 'AGL' not found`. AGL is Carbon-era and nothing in
-  this codebase actually calls into it any more — the handful of "AGL" hits
-  under `Source_Files/` are historic changelog comments, not live code; SDL2
-  owns GL context creation and buffer swap. Fixed by probing for it with a
-  real `AC_LINK_IFELSE` check instead of assuming it, so the older PPC/Intel
-  SDKs that still ship AGL keep linking it exactly as before, and only a
-  sysroot that genuinely lacks it (arm64's, so far) drops it.
+## (no ticket) arm64 slice: openal-soft 1.25.2 -Werror=function-effects vs Xcode 26 CoreAudioTypes
+Cause: openal-soft enables it on clang >= 20; clang 21 header trips coreaudio.cpp inputProc lambdas ("'nonblocking' ... type conversion").
+Removing the lambdas' noexcept did not help (diagnostic concerns the target C function-pointer type).
+Fix: forced HAVE_WFUNCTION_EFFECTS off in the dependency's CMakeLists.txt, not engine code.
 
-- **arm64 slice: openal-soft 1.25.2's own build enables
-  `-Werror=function-effects` on clang ≥ 20, and Xcode 26/clang 21's
-  `CoreAudioTypes.framework` header trips it on `coreaudio.cpp`'s
-  `inputProc` lambdas** ("attribute 'nonblocking' should not be added via
-  type conversion") — a real upstream/SDK version mismatch, not a behavior
-  change; removing the lambdas' `noexcept` didn't help, since the diagnostic
-  turned out to be about the target C function-pointer type, not the source
-  lambda. Fixed at the dependency's own build config (forcing
-  `HAVE_WFUNCTION_EFFECTS` off in its `CMakeLists.txt`), not by patching
-  engine code.
+## alephone#15 imac-2019 as x86_64 build host: shared GCC 7.5 bootstrap toolchain fails on Sequoia
+Error: bundled ld `ld: library 'System' not found` (toolchain exists to build the PPC cross-compiler on Lion, not app code).
+Fix: build.sh x86_64 branch probes for a working link at runtime, else native clang + Homebrew.
+Fallback deployment-target floor is 10.9 (GCC path 10.6): asio needs __thread TLS, fails at -mmacosx-version-min=10.6.
 
-- **imac-2019 as an x86_64 build host (alephone#15): the shared GCC 7.5
-  bootstrap cross-toolchain doesn't run on Sequoia at all.** It exists to
-  build the PPC cross-compiler on Lion, not to compile application code, and
-  its own bundled `ld` can't find `libSystem` on a modern host: `ld:
-  library 'System' not found`. `build.sh`'s x86_64 branch now probes for a
-  working link with that toolchain at runtime rather than assuming it works
-  everywhere, and falls back to native clang + Homebrew where it doesn't —
-  imac-2019 is genuinely x86_64, so cross-compiling through an old bootstrap
-  compiler there was never necessary. That fallback path's deployment-target
-  floor is 10.9, not the GCC 7.5 path's 10.6: asio needs `__thread`-based
-  TLS, unsupported by the Mach-O ABI below 10.7, measured directly (a bare
-  `#include <asio.hpp>` fails to compile at `-mmacosx-version-min=10.6`,
-  "thread-local storage is not supported for the current target").
+## (no ticket) G3 (yosemite, 10.3.9): SDL_OpenFPFromBundleOrFallback called NSAutoreleasePool drain
+Crash: EXC_BREAKPOINT in _NSRaiseError via _objc_msgForward (unrecognized selector); ScenarioChooser::add_scenario -> SDL_RWFromFile.
+Cause: -drain is 10.4+ (Panther Foundation 6.3.6 lacks it). Bug was in panther-sdl2 (fleet SDL 2.0.3 fork), not alephone source.
+Fix: swapped to -release there (same without ObjC GC); ppc slice's SDL2 rebuilt.
+Verified on the same real G3: reaches scenario chooser and plays, no new crash report.
 
-- **Real crash on a real G3 (`yosemite`, 10.3.9): `SDL_OpenFPFromBundleOrFallback`
-  called `[NSAutoreleasePool drain]`, and `-drain` doesn't exist on Panther.**
-  Crash reporter (Aleph One's own launch, not a synthetic repro): `EXC_BREAKPOINT`
-  in `_NSRaiseError`, reached via Objective-C message forwarding
-  (`_objc_msgForward` → `-[NSObject(NSForwardInvocation) forward::]` →
-  `+[NSException raise:format:]`) — the signature of an unrecognized selector,
-  not a real exception path. Full stack: `ScenarioChooser::add_scenario` →
-  `ScenarioChooserScenario::load` → `FileSpecifier::Open` → `SDL_RWFromFile` →
-  `SDL_OpenFPFromBundleOrFallback`, i.e. before the interactive scenario-chooser
-  screen even appears — every launch on a real 10.3.9 machine hit this.
-  `-drain` is a Mac OS X 10.4+ addition (a GC-aware synonym for `-release`);
-  Panther's Foundation (6.3.6, confirmed from the crash report itself) has no
-  such method, so the call falls through Objective-C's forwarding machinery
-  into an uncaught `NSException`. Root cause was in `panther-sdl2` (the fleet's
-  own SDL 2.0.3 fork for Panther/Tiger, shared with other ports — not something
-  in alephone's own source), fixed there by swapping to `-release`, which has
-  existed since NSObject/NSAutoreleasePool day one and is the exact non-GC
-  equivalent (this project never runs under Objective-C GC, so the two are
-  behaviorally identical everywhere `-drain` also worked). Rebuilt the ppc
-  slice's SDL2 against the fix and reverified on the same real G3: process
-  reaches the scenario chooser and plays correctly, no new crash report.
+## alephone#21 App Translocation on fresh DMG download: "Map, Shapes, Images, Sounds ... (error -1)"
+2026-09-02, imac-2019. Cause: app kept com.apple.quarantine, so macOS ran a read-only AppTranslocation/<uuid>/d/ copy apart from data files.
+get_data_path(kPathDefaultData) in cspaths_darwin.cpp uses CFBundleCopyBundleURL(), which breaks there.
+Fix, package-dmg.sh, 3 passes: db8549f0 hidden dotfile sidecar (lost on drag), b2fe710f inlined clear+lsregister -f, 94d9dc20 in app dir.
+Shipped release-20260902-fat-5; deployed + smoke-tested on imac-2019 (quarantine cleared, launched).
+Open: app needed two launch attempts after the fix script; not root-caused.
 
-- **App Translocation on a fresh DMG download (alephone#21, 2026-09-02):
-  a real "latest DMG" download-and-run on imac-2019 hit "Please be sure the
-  files 'Map', 'Shapes', 'Images' and 'Sounds' are correctly installed and
-  try again. (error -1)"** — not a Desktop-vs-Applications location issue,
-  and not a ScenarioChooser/MML filename bug (both were suspected and ruled
-  out by reading the actual crash log and the actual running process's
-  path). Root cause: `Aleph One.app` still carried `com.apple.quarantine`
-  from the download, so macOS launched it via App Translocation — a hidden
-  read-only copy under `/private/var/folders/.../AppTranslocation/<uuid>/d/`
-  isolated from its sibling data files. `get_data_path(kPathDefaultData)`
-  (`Source_Files/CSeries/cspaths_darwin.cpp`) derives the data directory from
-  the bundle's parent via `CFBundleCopyBundleURL()`, which breaks under
-  translocation; `kPathBundleData` would have survived it, but the
-  ScenarioChooser's own discovery path doesn't use it. Fixed in
-  `scripts/package-dmg.sh` (three iterations, all real bugs caught by
-  testing an actual drag-and-drop on imac-2019, not just reasoning about it):
-  first pass (`db8549f0`) shipped a `Fix Launch Problems.command` that called
-  a hidden `.clear-launch-quarantine.sh` sidecar — Finder drag never includes
-  hidden dotfiles, so a real user's copy silently lost the file the script
-  depended on ("no such file or directory"). Second pass (`b2fe710f`) inlined
-  the quarantine-clear + `lsregister -f` logic directly into the one visible
-  `.command` file. Third pass (`94d9dc20`) moved that file from the DMG root
-  into the `Aleph One` folder itself, next to `Aleph One.app`, so it survives
-  a single-folder drag instead of being left behind at the DMG root. Shipped
-  as `release-20260902-fat-5`, deployed and smoke-tested for real on
-  imac-2019 (not just packaged) — quarantine cleared, app launched. One
-  still-open, unresolved detail from that same test: the app needed two
-  launch attempts after running the fix script before it actually opened;
-  not yet root-caused.
+## alephone#24 EXC_BREAKPOINT in NSWindow setContentSize/Cocoa_SetWindowFullscreen, mini-g4 Tiger
+2026-09-03. Cause: shell.cpp SDL_WINDOWEVENT_FOCUS_GAINED "Mojave" workaround toggled SDL_SetWindowFullscreen off/on on all Apple builds.
+Traps in -[NSWindow _setFrameCommon:display:stashSize:] on Tiger AppKit (not GCC14); scmode_fullscreen="false" predated it.
+Fix: gate on sysctlbyname("kern.osrelease") Darwin major >= 18 (Mojave+).
+Verified real mini-g4: ppc slice lipo'd into deployed fat binary, --nogl + scenario dir alive 25s+ (crashed ~1s before), clean SIGTERM.
 
-- **`EXC_BREAKPOINT` in `NSWindow setContentSize`/`Cocoa_SetWindowFullscreen`
-  at startup on a real mini-g4 (Tiger 10.4.11), `--nogl` (alephone#24,
-  2026-09-03).** `Source_Files/shell.cpp`'s `SDL_WINDOWEVENT_FOCUS_GAINED`
-  handler carries a first-window workaround, commented "work around Mojave
-  issue," that toggles `SDL_SetWindowFullscreen()` off then back on. It ran
-  unconditionally on every `__APPLE__` build regardless of macOS version.
-  On Tiger's ancient AppKit that redundant toggle traps inside
-  `-[NSWindow _setFrameCommon:display:stashSize:]` — an Objective-C runtime
-  assertion, not a GCC14 codegen bug (this is a call into Apple's own
-  AppKit, confirmed from the crash-reporter stack). The on-disk preference
-  (`scmode_fullscreen="false"`) predated the crash, ruling out the
-  stale-preference theory the issue itself raised. Fix: gate the whole
-  first-window workaround behind a runtime OS-version check
-  (`sysctlbyname("kern.osrelease")`, Darwin major ≥ 18 == macOS 10.14
-  Mojave+) instead of assuming modern AppKit on every Apple target — the
-  workaround was always meant for Mojave only, per its own comment.
-  Verified on real mini-g4 hardware: rebuilt just the ppc slice, `lipo`'d
-  it into the existing fat test binary already deployed there, ran the
-  exact repro (`--nogl` + scenario-directory positional arg) that crashed
-  within ~1s in the original report — process stayed alive and running 25+
-  seconds past that window with no new crash-reporter entry, then quit
-  cleanly on `SIGTERM`. (A first repro run was mistakenly left running in
-  the background past its `ssh` session and had to be killed separately —
-  not related to the fix itself, just a test-methodology slip while
-  verifying it.)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-ppc-symbols.sh - the PPC weak-linking gate (.claude/rules/
-# legacy-mac-hardware.md): every non-weak undefined symbol in the ppc slice
+# .claude/rules/ppc-facts.md): every non-weak undefined symbol in the ppc slice
 # must be defined by some library in the Mac OS X 10.3.9 SDK. One 10.4-only
 # symbol links fine on the build host and then dyld aborts at launch on a
 # 10.3.9 G3.

@@ -532,7 +532,7 @@ REMOTE_BUILD
 		echo "[build] fetched build/alephone-x86_64"
 		otool -hv "$REPO_ROOT/build/alephone-x86_64"
 
-		# SDL2 is the one dependency of the 6 in legacy-mac-hardware.md that is
+		# SDL2 is the one dependency of the 6 in .claude/rules/ppc-facts.md that is
 		# NOT statically linked on x86_64 (everything else -- SDL2_ttf, boost,
 		# asio, libsndfile, openal-soft -- builds --enable-static per
 		# build-deps-intel.sh, or from source above on the native-clang path).

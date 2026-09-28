@@ -1,19 +1,22 @@
 # Aleph One old-Mac port
 
-**Core Goal:** Port Marathon 1/2/Infinity on the current Aleph One engine as ONE fat binary spanning `ppc` (10.3.9 target / 10.4 fallback), `i386` (10.4.4+) and `x86_64` (10.5+). This is a from-scratch build.
+Marathon 1/2/Infinity on the current Aleph One engine, one fat binary: ppc (10.3.9 target, 10.4 fallback), i386, x86_64, arm64. Scenarios are submodules in `data/Scenarios/`. Fork of `Aleph-One-Marathon/alephone`.
 
-## Read on demand
-- `.claude/rules/legacy-mac-hardware.md` — compilation, dependencies, legacy architectures (auto-loads for build scripts and engine source).
-- `.claude/rules/repo-specifics.md` — this fork's Git/GitHub specifics.
-- `.claude/rules/builds-and-ci.md` — CI (auto-loads for build/CI files).
-- `PORTING-PPC.md` — port plan: target matrix, dependency decisions, toolchain resolution.
-- `BUILD-HOST.md` — machine roles, Apple SDK downloads.
-- `SERVER.md` — dedicated server investigation findings.
-- `BUGFIXES.md` — running log of bug fixes in this fork.
+## Rules (each one a mistake that happened)
+- Never PR, push a branch or file an issue upstream; the maintainer refuses porting patches.
+- Never pipe `pick-bench-host.sh --acquire`: `| tail` hid a failed claim (INCIDENTS 2026-09-23).
+- `build.sh` grabs any free host, but ppc deps exist only on mini-intel: `BUILD_HOSTS=mini-intel` (never `BUILD_HOST=`, which skips the lock).
+- A PPC binary passes `nm -arch ppc -u` against the 10.3.9 SDK, or dyld aborts at launch on a G3.
+- Treat any `std::locale`-facet call as a PPC crash suspect (`docs/ppc-lessons.md`).
+- Client tags are `vX.Y.Z`; `server-vX.Y.Z` is separate. Delete old releases without `--cleanup-tag`.
+- qemu-tiger3d, one claim: `scripts/shared.sh pick-bench-host.sh --run qemu-tiger3d "<label>" -- <script>` running `deploy-dmg.sh`, `smoke-dmg.sh`, `bench-evidence.sh` (`BENCH_ARTEFACT=<staged binary> BENCH_ADAPTER=scripts/bench-adapter.sh`), `qemu-vm.sh screendump <png>`. See `old-mac-build-host/docs/qemu-vm.md`.
 
-## Repo-specific traps not covered by fleet POLICY.md
-- Two sessions can collide silently in this working tree, and a sync can write into it mid-task — stage by name, never `git add -A`.
-- This repo's hardware testing scope spans every dual-boot OS alias on the G3 and G5 Dual 2.7 machines, not just whichever OS happens to be booted right now.
-- qemu-tiger3d iteration, one claim end to end: `scripts/shared.sh pick-bench-host.sh --run qemu-tiger3d "<label>" -- <script>` running `deploy-dmg.sh qemu-tiger3d <dmg>`, `smoke-dmg.sh qemu-tiger3d`, `BENCH_ARTEFACT=<local staged binary> BENCH_ADAPTER=scripts/bench-adapter.sh bench-evidence.sh qemu-tiger3d <round>`, `qemu-vm.sh screendump <out.png>` — see `old-mac-build-host/docs/qemu-vm.md`.
-
-Board flow, releases, evidence rules and decide-don't-ask are fleet-wide and live in `retro-agents/POLICY.md` (every session's system prompt) and `retro-agents/briefs/` — not duplicated here. Where they and this file differ, POLICY wins.
+## Where to look
+- Build and deps: `scripts/build.sh`, `scripts/build-deps-*.sh`; host setup `BUILD-HOST.md`.
+- Package, deploy, smoke, bench: `scripts/package-dmg.sh`, `scripts/bench-adapter.sh`; the rest via `scripts/shared.sh`.
+- PPC toolchain and crash lessons: `docs/ppc-lessons.md`; deps and SDL2 floor: `.claude/rules/ppc-facts.md`.
+- Port plan and target matrix: `PORTING-PPC.md` (`grep -n '^## '`).
+- Dedicated server: `SERVER.md`. Tiger VM renderer: `docs/VM-TIGER.md`.
+- Tests: `tests/` (Catch2 `replay_film_test.cpp` checks endian and replay). CI: `.claude/rules/builds-and-ci.md`.
+- Fix and incident history: `grep -n '#NN' BUGFIXES.md INCIDENTS.md`; older in `docs/archive/`.
+- Upstream engine docs: `docs/` (Lua, MML, netgame).

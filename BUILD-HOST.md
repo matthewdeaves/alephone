@@ -1,5 +1,9 @@
 # Build host setup — PowerPC toolchain
 
+How builds reach the fleet: shared scripts via `scripts/shared.sh` and the per-script overrides they
+need, machine roles, the Apple SDKs to fetch, the GCC 14 bootstrap on Tiger, and post-setup checks.
+`grep -n '^## '` for sections.
+
 ## Shared fleet scripts (build-host#105 pin, alephone#43)
 
 This repo no longer carries copies of `pick-build-host.sh`, `pick-bench-host.sh`,

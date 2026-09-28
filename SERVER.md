@@ -1,10 +1,9 @@
 # Dedicated server — findings, 2026-08-23
 
-Investigated for the manager after a peer session raised: "check whether this
-engine can run a dedicated server at all before assuming it maps onto the
-other four ports." Answer: it already can. There is a real, headless,
-already-shipping dedicated server in this codebase, `standalone_hub`. The
-premise that nothing like it exists here is wrong.
+Aleph One already has a headless, shipping dedicated server, `standalone_hub`
+(`Source_Files/Network/StandaloneHub/`), contrary to the assumption that none exists.
+This file records what it is, its two real limits, and what is left to do.
+`grep -n '^## '` for sections.
 
 ## What exists — measured from source, not reasoned
 

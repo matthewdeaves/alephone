@@ -25,18 +25,22 @@ Newest first.
   `gl-tier: 0 (renderer 'ATI Radeon 9700 OpenGL Engine', classic, ...)` on its
   own, and `bench-fps.sh` measured 30.3/60.3/139.1 fps at the 30/60/uncapped
   targets (up from the unfixed build's 0.1 fps, confirmed on the same VM
-  before this patch). This is VM evidence only: no real R300-class Mac
-  (`imac-g5`, `g5-panther/tiger/desktop`, `quad-tiger/leopard`) was available
-  this session to reproduce or confirm on real hardware -- treat with the same
-  caution as any VM-only rendering finding until a real 9700/9800/X300-X600
-  confirms it. The mandatory `nm -arch ppc -u` weak-linking check
-  (`check-ppc-symbols.sh`) did not complete this session either: `mini-intel`
-  (the only host with the ppc cross-toolchain) was left with a stale lock by
-  an earlier interrupted attempt of this same check, and force-clearing
-  another session's build-host lock was correctly refused. The change adds no
-  new symbols (same `glGetString`/`strstr` pattern already used one line above
-  for the 9600/GMA 950 matches in this same function), so the risk is low, but
-  the check itself is still outstanding.
+  before this patch). `check-ppc-symbols.sh` (10.3.9 SDK weak-linking gate)
+  reran clean afterward: 530 strong undefined, 0 weak, PASS -- the change
+  adds no new symbol dependencies.
+  Real-hardware follow-up (`imac-g5`, Leopard 10.5.8, once the user powered
+  it on): its actual card reports as `ATI Radeon 9600 OpenGL Engine` -- the
+  already-confirmed 9600 case below, not a literal 9700. Deployed the fixed
+  build there (`deploy-dmg.sh`) and ran a real `bench-fps.sh`: picked classic
+  mode unforced (`gl-tier: 0 (renderer 'ATI Radeon 9600 OpenGL Engine',
+  classic, ...)`), 30.3/59.9/59.8 fps at the 30/60/uncapped targets, clean.
+  This reconfirms the `known_bad_shader_gpu` mechanism and the R300-family
+  classic-fallback thesis on real R300-class hardware with no regression from
+  this change -- but it is NOT a real-hardware confirmation of the literal
+  "Radeon 9700" string match itself, since no real 9700/9800/X300-X600 card
+  was available. That specific string remains VM-evidence-only; treat with
+  the same caution as any VM-only rendering finding until a real 9700-family
+  card confirms it directly.
 
 - **bench-evidence.sh runs against real (not fast-dev-box) fleet hosts could
   read INVALID off a genuinely live, ticking, hash-verified run** (alephone#45).

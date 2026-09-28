@@ -6,7 +6,6 @@
 - `.claude/rules/legacy-mac-hardware.md` — compilation, dependencies, legacy architectures (auto-loads for build scripts and engine source).
 - `.claude/rules/repo-specifics.md` — this fork's Git/GitHub specifics.
 - `.claude/rules/builds-and-ci.md` — CI (auto-loads for build/CI files).
-- `.claude/rules/adr/` or `docs/` — architecture decisions, if any are recorded.
 - `PORTING-PPC.md` — port plan: target matrix, dependency decisions, toolchain resolution.
 - `BUILD-HOST.md` — machine roles, Apple SDK downloads.
 - `SERVER.md` — dedicated server investigation findings.
@@ -15,5 +14,6 @@
 ## Repo-specific traps not covered by fleet POLICY.md
 - Two sessions can collide silently in this working tree, and a sync can write into it mid-task — stage by name, never `git add -A`.
 - This repo's hardware testing scope spans every dual-boot OS alias on the G3 and G5 Dual 2.7 machines, not just whichever OS happens to be booted right now.
+- qemu-tiger3d iteration, one claim end to end: `scripts/shared.sh pick-bench-host.sh --run qemu-tiger3d "<label>" -- <script>` running `deploy-dmg.sh qemu-tiger3d <dmg>`, `smoke-dmg.sh qemu-tiger3d`, `BENCH_ARTEFACT=<local staged binary> BENCH_ADAPTER=scripts/bench-adapter.sh bench-evidence.sh qemu-tiger3d <round>`, `qemu-vm.sh screendump <out.png>` — see `old-mac-build-host/docs/qemu-vm.md`.
 
 Board flow, releases, evidence rules and decide-don't-ask are fleet-wide and live in `retro-agents/POLICY.md` (every session's system prompt) and `retro-agents/briefs/` — not duplicated here. Where they and this file differ, POLICY wins.

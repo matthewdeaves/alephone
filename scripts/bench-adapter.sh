@@ -104,71 +104,40 @@ bench_launch() {
 	local log_secs="${ALEPHONE_BENCH_LOG_SECS:-2}"
 	local secs="${ALEPHONE_BENCH_SECS:-12}"
 	local quit_grace="${ALEPHONE_BENCH_QUIT_GRACE:-20}"
-	local run_home; run_home="$(_ao_run_home)"
-	local log_path; log_path="$(_ao_log_path)"
 	local force_classic=""
 	local classic_default=0
 	[ "$host" = qemu-tiger3d ] && classic_default=1
 	[ "${ALEPHONE_BENCH_FORCE_CLASSIC:-$classic_default}" = 1 ] && force_classic="ALEPHONE_FORCE_CLASSIC_GL=1 "
 
-	local remote_cmd
-	remote_cmd=$(cat <<EOF
-set -u
-if [ ! -x "$AO_EXEC" ] || [ ! -f "$AO_FILM" ]; then
-	echo "BENCH FAIL: install or demo film missing"
-	echo "===BENCH_META==="
-	echo "EXIT=127"
-	echo "ALIVE=no"
-	echo "PID="
-	exit 0
-fi
-rm -rf "$run_home"; mkdir -p "$run_home/home"
-( cd "$AO_APP_DIR" && HOME="$run_home/home" ALEPHONE_FPS_LOG=$log_secs ALEPHONE_FPS_TARGET=$target ${force_classic}\
-	exec "$AO_EXEC" -s --no-chooser -Q -l "$AO_DEMOS" "$AO_DATA" "$AO_FILM" \
-) > "$log_path" 2>&1 < /dev/null &
-pid=\$!
-sleep $secs
-# Real exit status, not just "still running": if the game already died
-# during our sleep (crash, early exit -- alephone#44's imac-g5 finding,
-# a stale pre-v1.2.0 install hanging silently with no fps-log output at
-# all), \`wait\` on a job this same shell backgrounded returns its actual
-# exit code without blocking, since it has already terminated. A still-
-# running process is EXIT=0 (launched fine, not yet finished) -- \`wait\`
-# is never called on it here, since that WOULD block.
-alive=no; ec=0
-if kill -0 "\$pid" 2>/dev/null; then
-	alive=yes
-else
-	wait "\$pid"; ec=\$?
-fi
-( sleep $quit_grace
-  osascript -e 'tell application "Aleph One" to quit' >/dev/null 2>&1 || true
-  for i in 1 2 3 4 5; do kill -0 "\$pid" 2>/dev/null || exit 0; sleep 1; done
-  kill "\$pid" 2>/dev/null || true
-  for i in 1 2 3; do kill -0 "\$pid" 2>/dev/null || exit 0; sleep 1; done
-  kill -9 "\$pid" 2>/dev/null || true
-) > /dev/null 2>&1 < /dev/null &
-disown
-cat "$log_path"
-echo "===BENCH_META==="
-echo "EXIT=\$ec"
-echo "ALIVE=\$alive"
-echo "PID=\$pid"
-EOF
-)
-	local out meta_line exitc alive pid
-	out="$(_ao_sh "$host" "$remote_cmd")"
-	meta_line="$(printf '%s\n' "$out" | grep -n '^===BENCH_META===$' | head -1 | cut -d: -f1)"
+	# build-host#147 / alephone#53: the game is started by the shared
+	# launch-game.sh (refuses if any game already runs on the host; its guest
+	# watchdog TERMs the game after --max-secs, which replaces the old detached
+	# quit subshell, so nothing leaks even if the caller dies). The launcher
+	# script execs the game, so the pid reported is the game itself.
+	local rhome; rhome="$(_ao_sh "$host" 'echo $HOME')"
+	local remote_dir="$rhome/oldmac/alephone/bench-evidence"
+	local remote_log="$remote_dir/game.log"
+	local launcher
+	launcher="$(dirname "${BASH_SOURCE[0]}")/shared.sh"
 
-	if [ -n "$meta_line" ]; then
-		printf '%s\n' "$out" | sed -n "1,$((meta_line - 1))p" > "$workdir/log.txt"
-		exitc="$(printf '%s\n' "$out" | sed -n "$((meta_line + 1))p" | sed 's/^EXIT=//')"
-		alive="$(printf '%s\n' "$out" | sed -n "$((meta_line + 2))p" | sed 's/^ALIVE=//')"
-		pid="$(printf '%s\n' "$out" | sed -n "$((meta_line + 3))p" | sed 's/^PID=//')"
-	else
-		printf '%s\n' "$out" > "$workdir/log.txt"
-		exitc=1; alive=no; pid=
+	if ! _ao_sh "$host" "[ -x '$AO_EXEC' ] && [ -f '$AO_FILM' ]"; then
+		echo "BENCH FAIL: install or demo film missing" > "$workdir/log.txt"
+		echo "EXIT=127"; echo "PID="
+		return 0
 	fi
+	_ao_sh "$host" "rm -rf '$remote_dir'; mkdir -p '$remote_dir/home' && cat > '$remote_dir/launch.sh'" <<EOL
+cd '$AO_APP_DIR' && HOME='$remote_dir/home' ALEPHONE_FPS_LOG=$log_secs ALEPHONE_FPS_TARGET=$target ${force_classic}exec '$AO_EXEC' -s --no-chooser -Q -l '$AO_DEMOS' '$AO_DATA' '$AO_FILM' > '$remote_log' 2>&1 < /dev/null
+EOL
+	local launch_out pid="" alive=no exitc=1
+	if launch_out="$("$launcher" launch-game.sh "$host" alephone --max-secs $((secs + quit_grace + 5)) -- sh "$remote_dir/launch.sh" 2>"$workdir/launch-game.err")"; then
+		pid="$(printf '%s\n' "$launch_out" | awk '/^PID /{print $2}')"
+		sleep "$secs"
+		if _ao_sh "$host" "kill -0 $pid 2>/dev/null"; then alive=yes; exitc=0; fi
+	else
+		exitc=$?
+	fi
+	_ao_sh "$host" "cat '$remote_log' 2>/dev/null" > "$workdir/log.txt" || true
+	[ -s "$workdir/launch-game.err" ] && cat "$workdir/launch-game.err" >> "$workdir/log.txt"
 
 	grep '^fps-log: [0-9]' "$workdir/log.txt" 2>/dev/null | sed 1d | awk '{print $2}' > "$workdir/stats.txt"
 	echo fps > "$workdir/stats.unit"

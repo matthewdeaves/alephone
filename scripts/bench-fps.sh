@@ -10,8 +10,8 @@
 # discarded as cold start. HOME points at a scratch dir under
 # ~/oldmac/alephone/bench, so the player's own preferences are never read
 # or written; the first run there is a first run, so the log also shows the
-# GL tier this Mac gets. Claims the host through pick-bench-host.sh and
-# terminates every run with the same quit, TERM, KILL escalation as smoke-dmg.sh.
+# GL tier this Mac gets. Claims the host through pick-bench-host.sh, starts each game via the shared launch-game.sh (build-host#147),
+# stops every run with a quit, then launch-game.sh --stop (TERM, never KILL).
 #
 # host-alias also accepts qemu-tiger3d (alephone#46): the QemuMac VM on the
 # workstation, an emulated G4 7400 + Radeon 9700 PRO on Tiger 10.4, reached
@@ -73,52 +73,58 @@ else
 	}
 fi
 
-if is_local_host "$HOST"; then
-	RUN_REMOTE=(/bin/sh -s --)
-else
-	RUN_REMOTE=(ssh "$HOST" bash -s --)
-fi
+# build-host#147 / alephone#53: the driver (this script) runs the loop and starts
+# every game through the shared launch-game.sh, which refuses if any game is
+# already running on the host, arms a guest-side watchdog, and stops the game with
+# TERM. Remote work is only short sh commands, so nothing here backgrounds a game
+# itself.
+host_sh() {
+	if is_local_host "$HOST"; then bash -c "$1"
+	else ssh -o BatchMode=yes -o ConnectTimeout=15 "$HOST" "$1"; fi
+}
+launch_game() { "$REPO_ROOT/scripts/shared.sh" launch-game.sh "$@"; }
 
 CLASSIC_DEFAULT=0
 [ "$HOST" = qemu-tiger3d ] && CLASSIC_DEFAULT=1
-"${RUN_REMOTE[@]}" "$ROUNDS" "$SECS" "${ALEPHONE_BENCH_FORCE_CLASSIC:-$CLASSIC_DEFAULT}" << 'REMOTE_BENCH'
-# No pipefail: Tiger's /bin/bash 2.05b rejects it.
-set -u
-ROUNDS="$1"; SECS="$2"
-[ "$3" = 1 ] && export ALEPHONE_FORCE_CLASSIC_GL=1
+FORCE_CLASSIC="${ALEPHONE_BENCH_FORCE_CLASSIC:-$CLASSIC_DEFAULT}"
+
+RHOME="$(host_sh 'echo $HOME')"
 APP_DIR="/Applications/Aleph One"
 EXEC="$APP_DIR/Aleph One.app/Contents/MacOS/Aleph One"
 DATA="$APP_DIR/Scenarios/Marathon 2"
 DEMOS="$DATA/Demos"
 FILM="$DEMOS/L00.filA"
-W="$HOME/oldmac/alephone/bench"
-[ -x "$EXEC" ] && [ -f "$FILM" ] || { echo "BENCH FAIL: install or demo film missing"; exit 1; }
+W="$RHOME/oldmac/alephone/bench"
+host_sh "[ -x '$EXEC' ] && [ -f '$FILM' ]" || { echo "BENCH FAIL: install or demo film missing"; exit 1; }
 
-rm -rf "$W"; mkdir -p "$W/home"
-stop() {
-	osascript -e 'tell application "Aleph One" to quit' >/dev/null 2>&1 || true
-	for i in 1 2 3 4 5; do kill -0 "$1" 2>/dev/null || return 0; sleep 1; done
-	kill "$1" 2>/dev/null || true
-	for i in 1 2 3; do kill -0 "$1" 2>/dev/null || return 0; sleep 1; done
-	kill -9 "$1" 2>/dev/null || true; sleep 1
-	kill -0 "$1" 2>/dev/null && echo "BENCH FAIL: pid $1 survived SIGKILL" && exit 1
-	return 0
+host_sh "rm -rf '$W'; mkdir -p '$W/home'"
+GPID=""
+stop_game() {
+	[ -n "$GPID" ] || return 0
+	host_sh "osascript -e 'tell application \"Aleph One\" to quit' >/dev/null 2>&1 || true; for i in 1 2 3 4 5; do kill -0 $GPID 2>/dev/null || exit 0; sleep 1; done" || true
+	launch_game --stop "$HOST" "$GPID" || { echo "BENCH FAIL: pid $GPID survived TERM"; exit 1; }
+	GPID=""
 }
+trap stop_game EXIT INT TERM
 
 r=1
 while [ "$r" -le "$ROUNDS" ]; do
 	for target in 30 60 0; do
 		log="$W/r$r-t$target.log"
-		# exec, so $! is the game itself: stop() used to kill only this
-		# subshell and leave the game running into the next run (and into
-		# the next claimant's session).
-		( cd "$APP_DIR" && HOME="$W/home" ALEPHONE_FPS_LOG=5 ALEPHONE_FPS_TARGET=$target \
-			exec "$EXEC" -s --no-chooser -Q -l "$DEMOS" "$DATA" "$FILM" > "$log" 2>&1 < /dev/null ) &
-		pid=$!
+		classic=""; [ "$FORCE_CLASSIC" = 1 ] && classic="ALEPHONE_FORCE_CLASSIC_GL=1 "
+		# The launcher execs the game, so the pid launch-game.sh reports is
+		# the game itself and --stop terminates the game, not a subshell.
+		host_sh "cat > '$W/launch.sh'" <<EOF
+cd '$APP_DIR' && HOME='$W/home' ALEPHONE_FPS_LOG=5 ALEPHONE_FPS_TARGET=$target ${classic}exec '$EXEC' -s --no-chooser -Q -l '$DEMOS' '$DATA' '$FILM' > '$log' 2>&1 < /dev/null
+EOF
+		out="$(launch_game "$HOST" alephone --max-secs $((SECS + 60)) -- sh "$W/launch.sh")" || {
+			echo "BENCH FAIL: launch-game.sh refused or failed for round $r target $target"; exit 1; }
+		GPID="$(printf '%s\n' "$out" | awk '/^PID /{print $2}')"
 		sleep "$SECS"
-		alive=yes; kill -0 "$pid" 2>/dev/null || alive=no
-		stop "$pid"
-		[ "$r$target" = "130" ] && grep -E '^(GL_RENDERER|gl-tier|fps-log: window)' "$log" | sed 's/^/  /'
+		alive=yes; host_sh "kill -0 $GPID 2>/dev/null" || alive=no
+		stop_game
+		hostlog="$(host_sh "cat '$log'")"
+		[ "$r$target" = "130" ] && printf '%s\n' "$hostlog" | grep -E '^(GL_RENDERER|gl-tier|fps-log: window)' | sed 's/^/  /'
 		# drop the first (cold) window; report mean/min fps and worst frame.
 		# fps-log ends ", ticks N" (alephone#42, 21f3761f) once a host's
 		# installed binary has the world-tick liveness field; older
@@ -126,7 +132,7 @@ while [ "$r" -le "$ROUNDS" ]; do
 		# by whether the line's last field is bare digits, so this parses
 		# both formats correctly instead of silently misreading worst-frame
 		# once any host gets the new binary.
-		grep '^fps-log: [0-9]' "$log" | sed 1d | awk -v r="$r" -v t="$target" -v a="$alive" '
+		printf '%s\n' "$hostlog" | grep '^fps-log: [0-9]' | sed 1d | awk -v r="$r" -v t="$target" -v a="$alive" '
 			{
 				f = $2; n++; s += f; if (n == 1 || f < mn) mn = f
 				if ($NF ~ /^[0-9]+$/ && $(NF-1) == "ticks") { w = $(NF-3); tk = $NF; have_ticks = 1; tsum += tk }
@@ -141,5 +147,4 @@ while [ "$r" -le "$ROUNDS" ]; do
 	done
 	r=$((r + 1))
 done
-rm -rf "$W"
-REMOTE_BENCH
+host_sh "rm -rf '$W'"

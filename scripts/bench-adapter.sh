@@ -173,6 +173,15 @@ EOF
 	grep '^fps-log: [0-9]' "$workdir/log.txt" 2>/dev/null | sed 1d | awk '{print $2}' > "$workdir/stats.txt"
 	echo fps > "$workdir/stats.unit"
 
+	# build-host#135/alephone#50: $workdir is already bench-evidence.sh's own
+	# bundle dir, never this repo's tree, so a peer-run bench here never left
+	# uncommitted output -- but mirror the raw log into BENCH_OUT_DIR (the
+	# bundle's port-out/) too when set, so the bundle carries a self-contained
+	# copy instead of port-out/ being empty for this adapter.
+	if [ -n "${BENCH_OUT_DIR:-}" ]; then
+		cp "$workdir/log.txt" "$BENCH_OUT_DIR/round-$round.log" 2>/dev/null || true
+	fi
+
 	echo "EXIT=${exitc:-unknown}"
 	[ "$alive" = yes ] && echo "PID=$pid" || echo "PID="
 }

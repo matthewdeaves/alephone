@@ -1,7 +1,7 @@
 # Incidents
 
-Things that went wrong on shared fleet machines, and what changed. Newest first, one entry each.
-Grep by date or host: `grep -n '2026-09-23' INCIDENTS.md`.
+Search by ticket or date; entries are newest first.
+Archive: `docs/archive/`.
 
 ## 2026-09-23 mini-intel2: a smoke's `open -n` hung for 3.5 hours
 Shared `smoke-dmg.sh` launched via LaunchServices at 14:39; `open -n` never returned and held my install loop until 18:07.

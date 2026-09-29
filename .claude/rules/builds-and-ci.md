@@ -1,8 +1,8 @@
 ---
 paths:
-  - ".github/workflows/*.yml"
+  - ".github/workflows/ci-build.yml"
 ---
 
-# CI
+# CI reference
 
-- `.github/workflows/ci-build.yml` runs on all pushes and PRs; `--with-catch2` is wired into the Linux configure step. Keep it green.
+Test coverage and the Linux Catch2 configuration: `docs/TESTS.md`.

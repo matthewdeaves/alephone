@@ -1,6 +1,10 @@
-= Xcode Notes
+# Xcode Notes
 
-== Changes
+Xcode project changes, build requirements and application-bundle notes.
+These are the upstream Xcode instructions; PPC fleet setup is in `BUILD-HOST.md`.
+Use the sections below for project layout and target-specific setup.
+
+## Changes
 
 1. The old `./PBProjects` directory has been renamed `./Xcode` and its `AlephOne.xcodeproj` and macOS-specific assets reorganized for easier maintenance. Project settings have been updated for Xcode 16.2.
 
@@ -21,7 +25,7 @@ There is a variation of this library, `libalephonesteam`, used by 3 Steam-enable
 4. The Preprocessor Macros for standalone M1-3 Targets previously defined `PREFER_APP_NAME_TO_BUNDLE_ID`, `SCENARIO_IS_BUNDLED` macros in addition to the 3 Aleph One macros. Since all 4 .app Targets now share `libalephone`, these have been removed. A custom `A1_PREFER_APP_NAME_TO_BUNDLE_ID` key has been added to the static `Info.plist` files to replicate the first macro's behavior as this affects search paths for Preferences and other files. The second macro is ignored: in standalone M1-3, the embedded scenario directory (`NAME.app/Contents/Resources/DataFiles/`) is searched for first in `shell.cpp` so the standalone apps appear to behave correctly without it.
 
 
-== TODO
+## TODO
 
 1. Using static Info.plist files (e.g. “Xcode/App_Resources/Marathon1/Info-Steam.plist”) instead of having Xcode generate each .app's plist is brittle. Make sure values in the Info.plist file match those in Build Settings, e.g. a mismatch between executable names causes codesigning to fail with a misleading error message:
 

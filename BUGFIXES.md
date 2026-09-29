@@ -1,6 +1,8 @@
-# Bug fixes
+# Bugfixes
 
-One entry per real bug fixed in this fork, newest first. Grep a ticket number (e.g. `alephone#47`) to find its entry.
+Search by ticket or date; entries are newest first.
+Archive: `docs/archive/BUGFIXES.md`.
+Dates added to undated accounts identify their recorded evidence or first Git record, not a newly inferred incident date.
 
 ## alephone#47 Radeon 9700 (R300): shader renderer 0.1 fps, now auto-picks classic GL
 Symptom: 0.1 fps on qemu-tiger3d (G4 + Radeon 9700 PRO, Tiger; qemu#10). sprite/wall.frag branch per-pixel; R300 -> CPU (PPEmulatorRun).
@@ -90,7 +92,7 @@ Fix: package-dmg.sh adds ad-hoc `codesign --force --deep -s -` + quarantine stri
 Verified: imac-2019 (Sequoia) went from launching nothing to a running process via LaunchServices `open`.
 Caveat: `spctl -a -vv` still says rejected (no Developer ID/notarization, out of scope); one-time right-click-Open remains.
 
-## (no ticket) deploy-dmg.sh/smoke-dmg.sh remote-shell portability bugs on real fleet OSes
+## 2026-09-28 (no ticket) deploy-dmg.sh/smoke-dmg.sh remote-shell portability bugs on real fleet OSes
 `set -o pipefail` errors on Tiger bash 2.05b and leaves -e/-u unset: dropped. `open -g` on Tiger/Panther drops the path arg: dropped.
 `pgrep` absent pre-Leopard: use `ps -Awww -o command= | grep` (www avoids COMMAND truncation and false "not running").
 Bare `osascript ... to quit` launches X then hangs: gate on process confirmed running.
@@ -101,7 +103,7 @@ Cause: shell.cpp passed SDL_INIT_JOYSTICK|SDL_INIT_GAMECONTROLLER in one SDL_Ini
 Fix: retry SDL_Init without joystick flags and log it; gamepads work iff the SDL2 slice supports them.
 Verified against a real --disable-joystick SDL 2.30.10 ("SDL not built with joystick support", retry succeeds).
 
-## (no ticket) Autotools build on macOS never linked the Cocoa platform files
+## 2026-09-28 (no ticket) Autotools build on macOS never linked the Cocoa platform files
 Cause: csalerts_sdl.cpp/cspaths_sdl.cpp need csalerts.mm/cspaths.mm symbols; Makefile.am listed them only as EXTRA_; Darwin links failed.
 Fix: new TARGET_DARWIN automake conditional in configure.ac adds them to libcseries_a_SOURCES on *-darwin*.
 Matters because the PPC cross build uses autotools, not Xcode (upstream builds macOS only via Xcode).
@@ -113,7 +115,7 @@ Real hw: imac-g5 (Leopard) 0 libstdc++.6.dylib cross-image binds (was 188), 45s 
 Residual risk: ~200 reverse binds (~istream/~ostream, string _Rep, locale facet ids) now hit SYSTEM libstdc++; no crash seen.
 Synthetic repro missed this; recorded on alephone#11, not called fully fixed.
 
-## (no ticket) deploy-dmg.sh aborted on yosemite (Panther 10.3.9) before quarantine-clear
+## 2026-09-28 (no ticket) deploy-dmg.sh aborted on yosemite (Panther 10.3.9) before quarantine-clear
 Cause: `hdiutil detach <mountpoint-path>` always fails there ("No such file or directory"); by device node works. `set -eu` aborted.
 Diagnosed by buildhost with `bash -x`. Effect: apps copied but never quarantine-cleared.
 Fix: quarantine-clear now runs before detach; detach uses device node from `mount` first, falls back to path, warns instead of aborting.
@@ -122,7 +124,7 @@ Fix: quarantine-clear now runs before detach; detach uses device node from `moun
 Error: `ld: framework 'AGL' not found`. AGL is unused Carbon-era (remaining Source_Files hits are changelog comments); SDL2 owns GL context.
 Fix: probe with a real AC_LINK_IFELSE check; older PPC/Intel SDKs still link AGL, only sysroots lacking it (arm64) drop it.
 
-## (no ticket) arm64 slice: openal-soft 1.25.2 -Werror=function-effects vs Xcode 26 CoreAudioTypes
+## 2026-09-28 (no ticket) arm64 slice: openal-soft 1.25.2 -Werror=function-effects vs Xcode 26 CoreAudioTypes
 Cause: openal-soft enables it on clang >= 20; clang 21 header trips coreaudio.cpp inputProc lambdas ("'nonblocking' ... type conversion").
 Removing the lambdas' noexcept did not help (diagnostic concerns the target C function-pointer type).
 Fix: forced HAVE_WFUNCTION_EFFECTS off in the dependency's CMakeLists.txt, not engine code.
@@ -132,18 +134,11 @@ Error: bundled ld `ld: library 'System' not found` (toolchain exists to build th
 Fix: build.sh x86_64 branch probes for a working link at runtime, else native clang + Homebrew.
 Fallback deployment-target floor is 10.9 (GCC path 10.6): asio needs __thread TLS, fails at -mmacosx-version-min=10.6.
 
-## (no ticket) G3 (yosemite, 10.3.9): SDL_OpenFPFromBundleOrFallback called NSAutoreleasePool drain
+## 2026-09-28 (no ticket) G3 (yosemite, 10.3.9): SDL_OpenFPFromBundleOrFallback called NSAutoreleasePool drain
 Crash: EXC_BREAKPOINT in _NSRaiseError via _objc_msgForward (unrecognized selector); ScenarioChooser::add_scenario -> SDL_RWFromFile.
 Cause: -drain is 10.4+ (Panther Foundation 6.3.6 lacks it). Bug was in panther-sdl2 (fleet SDL 2.0.3 fork), not alephone source.
 Fix: swapped to -release there (same without ObjC GC); ppc slice's SDL2 rebuilt.
 Verified on the same real G3: reaches scenario chooser and plays, no new crash report.
-
-## alephone#21 App Translocation on fresh DMG download: "Map, Shapes, Images, Sounds ... (error -1)"
-2026-09-02, imac-2019. Cause: app kept com.apple.quarantine, so macOS ran a read-only AppTranslocation/<uuid>/d/ copy apart from data files.
-get_data_path(kPathDefaultData) in cspaths_darwin.cpp uses CFBundleCopyBundleURL(), which breaks there.
-Fix, package-dmg.sh, 3 passes: db8549f0 hidden dotfile sidecar (lost on drag), b2fe710f inlined clear+lsregister -f, 94d9dc20 in app dir.
-Shipped release-20260902-fat-5; deployed + smoke-tested on imac-2019 (quarantine cleared, launched).
-Open: app needed two launch attempts after the fix script; not root-caused.
 
 ## alephone#24 EXC_BREAKPOINT in NSWindow setContentSize/Cocoa_SetWindowFullscreen, mini-g4 Tiger
 2026-09-03. Cause: shell.cpp SDL_WINDOWEVENT_FOCUS_GAINED "Mojave" workaround toggled SDL_SetWindowFullscreen off/on on all Apple builds.
@@ -151,3 +146,9 @@ Traps in -[NSWindow _setFrameCommon:display:stashSize:] on Tiger AppKit (not GCC
 Fix: gate on sysctlbyname("kern.osrelease") Darwin major >= 18 (Mojave+).
 Verified real mini-g4: ppc slice lipo'd into deployed fat binary, --nogl + scenario dir alive 25s+ (crashed ~1s before), clean SIGTERM.
 
+## alephone#21 App Translocation on fresh DMG download: "Map, Shapes, Images, Sounds ... (error -1)"
+2026-09-02, imac-2019. Cause: app kept com.apple.quarantine, so macOS ran a read-only AppTranslocation/<uuid>/d/ copy apart from data files.
+get_data_path(kPathDefaultData) in cspaths_darwin.cpp uses CFBundleCopyBundleURL(), which breaks there.
+Fix, package-dmg.sh, 3 passes: db8549f0 hidden dotfile sidecar (lost on drag), b2fe710f inlined clear+lsregister -f, 94d9dc20 in app dir.
+Shipped release-20260902-fat-5; deployed + smoke-tested on imac-2019 (quarantine cleared, launched).
+Open: app needed two launch attempts after the fix script; not root-caused.

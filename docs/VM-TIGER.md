@@ -23,3 +23,8 @@ Local evidence: `~/oldmac/evidence/solo-vm-20260927/`, including
 
 Builds, shared deployment, and CI remain owned by `old-mac-build-host`.
 No game binary or real-hardware renderer defaults changed for this profile.
+
+## One-claim iteration
+
+Run `scripts/shared.sh pick-bench-host.sh --run qemu-tiger3d "<label>" -- <script>` with a driver that performs `deploy-dmg.sh`, `smoke-dmg.sh`, `bench-evidence.sh` and `qemu-vm.sh screendump <png>` through `scripts/shared.sh`.
+Set `BENCH_ARTEFACT=<staged binary>` and `BENCH_ADAPTER=scripts/bench-adapter.sh` for evidence. Stage the artifact locally before the run; it must be the binary being measured. Shared VM procedure: `../old-mac-build-host/docs/qemu-vm.md`.
